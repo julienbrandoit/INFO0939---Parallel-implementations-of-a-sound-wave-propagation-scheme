@@ -5,11 +5,7 @@
 
 #include "fdtd.h"
 
-//test
-
-// test2
-
-// test 4
+//test final
 
 int main(int argc, const char *argv[]) {
   if (argc < 2) {
