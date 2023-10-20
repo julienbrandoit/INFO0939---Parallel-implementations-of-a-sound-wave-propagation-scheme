@@ -1,11 +1,11 @@
 #pragma once
 #include <stdio.h>
 
-#ifndef M_PI //verification si M_PI est deja defini
-#define M_PI 3.14159265358979323846 //si c est le cas on execute cette ligne (macro)
-#endif //fin du ifndef
+#ifndef M_PI 
+#define M_PI 3.14159265358979323846 
+#endif 
 
-#if NDEBUG //si ndebug est defini (mode non debogage) et different de 0 -> macro de debogage
+#if NDEBUG 
 
 #define DEBUG_PRINTF(fmt, ...)
 #define DEBUG_PRINT(msg)
@@ -16,25 +16,25 @@
   printf("[DEBUG][%s:%d] " fmt "\n", __FILE__, __LINE__, __VA_ARGS__)
 #define DEBUG_PRINT(msg) printf("[DEBUG][%s:%d] %s\n", __FILE__, __LINE__, msg)
 
-#endif //fin directive ndebug de debogage
+#endif 
 
 #define MAX_OUTPUTS 32 
 #define BUFSZ_LARGE 256
 #define BUFSZ_SMALL 16
 
-\\format de chaine pour scnaf et printf
+
 #define BUFFMT_LARGE "%255s"
 #define BUFFMT_SMALL "%15s"
 
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
 
-\\Macros pour obtenir le nombre de noeuds dans les directions x, y et z d une structure de donnees
+
 #define NUMNODESX(dat) ((dat)->grid.numnodesx)
 #define NUMNODESY(dat) ((dat)->grid.numnodesy)
 #define NUMNODESZ(dat) ((dat)->grid.numnodesz)
 
-\\Macros pour obtenir les coordonnees minimales et maximales de la grille d une structure de donnees
+
 #define XMIN(dat) ((dat)->grid.xmin)
 #define YMIN(dat) ((dat)->grid.ymin)
 #define ZMIN(dat) ((dat)->grid.zmin)
@@ -43,28 +43,28 @@
 #define YMAX(dat) ((dat)->grid.ymax)
 #define ZMAX(dat) ((dat)->grid.zmax)
 
-\\Macro pour obtenir le nombre total de noeuds dans une grille
+
 #define NUMNODESTOT(grid)                                                      \
   ((size_t)(grid).numnodesx * (grid).numnodesy * (grid).numnodesz)
 
-\\Macro pour obtenir l index lineaire d un point dans une grille tridimensionnelle, index lineaire unique au lieu de m, n, p
+
 #define INDEX3D(grid, m, n, p)                                                 \
   ((size_t)grid.numnodesy * grid.numnodesx * (p) + grid.numnodesx * (n) + (m))
 
-\\Macros pour obtenir et definir une valeur dans une grille tridimensionnelle
-#define GETVALUE(dat, m, n, p) ((dat)->vals[INDEX3D((dat)->grid, m, n, p)]) \\obtenir une valeur de la grille
+
+#define GETVALUE(dat, m, n, p) ((dat)->vals[INDEX3D((dat)->grid, m, n, p)]) 
 #define SETVALUE(dat, m, n, p, val)                                            \
   ((dat)->vals[INDEX3D((dat)->grid, m, n, p)] = (val))
 
-#ifdef _OPENMP \\verifie si OPENMP est definie. Si elle l est ca signifie que le code est en train d etre compile avec le support d OpenMP active.
+#ifdef _OPENMP 
 
 #include <omp.h>
 
-#define GET_TIME() (omp_get_wtime()) \\renvoie le temps écoule en secondes depuis un point de temps fixe
+#define GET_TIME() (omp_get_wtime()) 
 
 #else 
 
-#define GET_TIME() ((double)clock() / CLOCKS_PER_SEC) \\si OPENMP est non definie cad si le support OpenMP n est pas active, obtenir le temps CPU ecoule depuis le debut du programme
+#define GET_TIME() ((double)clock() / CLOCKS_PER_SEC) 
 
 #endif
 
@@ -94,14 +94,14 @@ typedef enum output_type {
 
 } output_type_t;
 
-\\structure de la grille tridimensionnelle
+
 typedef struct grid {
-  \\nombre de noeud dans les directions x, y et z 
+  
   int numnodesx;
   int numnodesy;
   int numnodesz;
 
-  \\coordonnees min et max de la grille
+  
   double xmin;
   double ymin;
   double zmin;
@@ -115,15 +115,15 @@ typedef struct grid {
 typedef struct source {
   source_type_t type;
 
-  \\position de la source
+  
   double posx;
   double posy;
   double posz;
 
-  int sampling; \\taux d echantillonage
-  int numsamples; \\nombre total d echantillons
+  int sampling; 
+  int numsamples; 
 
-  double *data; \\pointeur vers les donnees de la source
+  double *data; 
 
 } source_t;
 
@@ -131,29 +131,28 @@ typedef struct output {
   output_type_t type;
   output_source_t source;
 
-  char *filename; \\nom du fichier de sortie
+  char *filename; 
 
-  \\position de la sortie
+  
   double posx;
   double posy;
   double posz;
 
-  grid_t grid; \\grille asociee a la sortie
+  grid_t grid; 
 
-  FILE *fp; \\pointeur vers le fichier de sortie
+  FILE *fp; 
 
 } output_t;
 
 typedef struct parameters {
-  \\parametres de la simulation (discretisation spatiale et temporelle)
+  
   double dx;
   double dt;
   double maxt;
 
-  int outrate; \\taux de sortie
-  int numoutputs; \\nombre total de sorties
-
-  \\nom des fichiers d entree
+  int outrate; 
+  int numoutputs; 
+  
   char *cin_filename;
   char *rhoin_filename;
 
@@ -170,12 +169,12 @@ typedef struct data {
 } data_t;
 
 typedef struct simulation_data {
-  \\contient toutes les donnees necessaires pour une simulation
+  
   parameters_t params;
 
-  data_t *c, *rho, *rhohalf; \\donnees associees a la vitesse du son, a la densite et a la demi-densite
+  data_t *c, *rho, *rhohalf; 
 
-  \\les donnes a l ancien et au nouvel instant
+  
   data_t *pold, *pnew; 
   data_t *vxold, *vxnew;
   data_t *vyold, *vynew;
@@ -183,7 +182,7 @@ typedef struct simulation_data {
 
 } simulation_data_t;
 
-\\tableaux de chaines de caracteres qui mappent les valeurs de l enumeration a leurs representations sous forme de chaines de caracteres
+
 const char *source_type_keywords[] = {[SINE] = "sine", [AUDIO] = "audio"};
 
 const char *output_type_keywords[] = {[CUTX] = "cut_x",
