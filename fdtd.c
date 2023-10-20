@@ -7,6 +7,8 @@
 
 //test
 
+// test2
+
 int main(int argc, const char *argv[]) {
   if (argc < 2) {
     printf("\nUsage: ./fdtd <param_file>\n\n");
