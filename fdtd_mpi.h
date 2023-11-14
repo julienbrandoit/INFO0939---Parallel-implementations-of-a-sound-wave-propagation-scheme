@@ -88,6 +88,8 @@ typedef struct world {
   int periods[3];
   int reorder;
 
+  grid_t world_grid;
+
   data_t *p_out; 
   data_t *vx_out;
   data_t *vy_out;

@@ -1172,6 +1172,8 @@ void init_simulation(simulation_data_t *simdata, const char *params_filename, pr
         }
       }
     }
+
+    process->world->world_grid = world_grid
   }
 
   if ((simdata->pold = allocate_data(&sim_grid)) == NULL ||
