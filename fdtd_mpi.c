@@ -63,6 +63,8 @@ void init_process(process_s *process, world_s *world, simulation_data_t *simdata
 
 } 
 
+int main(int argc, const char *argv[]) {
+
 if (argc < 5) {
       if (world_rank == 0) {
           printf("\nUsage: mpirun -np N ./fdtd <param_file> <Px> <Py> <Pz>\n\n");
