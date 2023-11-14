@@ -3,7 +3,65 @@
 #include <string.h>
 #include <time.h>
 
-#include "fdtd.h"
+#include "fdtd_mpi.h"
+#include <mpi.h>
+
+void init_world(world_s *world, int[3] dims, int[3] periods, int reorder)
+{
+  world = malloc(sizeof(world_s));
+  if(!world)
+  {
+    //ERREUR
+  }
+
+  (world->dims)[0] = dims[0]
+  (world->dims)[1] = dims[1]
+  (world->dims)[2] = dims[2]
+  
+  (world->periods)[0] = periods[0]
+  (world->periods)[1] = periods[1]
+  (world->periods)[2] = periods[2]
+
+  world->reorder = reorder;
+
+  MPI_Comm_size(MPI_COMM_WORLD, &(world->world_size));
+
+  MPI_Dims_create(world->world_size, 3, dims);
+  MPI_Cart_create(MPI_COMM_WORLD, 3, dims, periods, reorder, &(world->cart_comm));
+
+  printf("\n");
+  printf("== WORLD CREATION (mpi implementation) == \n");
+  printf("  (P_x, P_y, P_z) = (%d, %d, %d)\n", dims[0], dims[1], dims[2]);
+  printf("  World size : %d\n", world->world_size);
+  printf("== PROCESSES CREATION (mpi implementation) == \n");
+
+} 
+
+void init_process(process_s *process, world_s *world, simulation_data_t *simdata)
+{
+  process = malloc(sizeof(process_s));
+  if(!process)
+  {
+    //ERREUR
+  }
+
+  process_s->world = world;
+
+  MPI_Comm_rank(MPI_COMM_WORLD , &(process->world_rank));
+  MPI_Comm_rank(world.cart_comm, &(process->cart_rank));
+
+  MPI_Cart_coords(world.cart_comm, process->cart_rank, 3, process->coords);
+
+  MPI_Cart_shift(world.cart_comm, 0, 1, 
+                  &(process->neighbors)[UP], &(process->neighbors)[DOWN]);
+  MPI_Cart_shift(world.cart_comm, 1, 1, 
+                  &(process->neighbors)[LEFT], &(process->neighbors)[RIGHT]);
+  MPI_Cart_shift(world.cart_comm, 2, 1, 
+                  &(process->neighbors)[FORWARD], &(process->neighbors)[BACKWARD]);
+
+  printf("Process : rank = %d, coords = (%d, %d)\n", process->world_rank, process->coords[0], process->coords[1]);
+
+} 
 
 int main(int argc, const char *argv[]) {
   if (argc < 2) {
@@ -11,8 +69,26 @@ int main(int argc, const char *argv[]) {
     exit(1);
   }
 
+  /*INIT MPI*/
+  MPI_Init(&argc, &argv);
+  
+  int P_x = 5, P_y = 5, P_z = 5;
+  int dims[3] = {P_x, P_y, P_z};
+  int periods[3] = {0,0,0};
+  int reorder = 0;
+
+  world_s my_world;
+  init_world(&my_world, dims, periods, reorder);
+
+  process_s my_process;
+  init_process(&my_process, &my_world, &simdata);
+
+  //WORLD_GRID : tableau de data_t pour les outputs
+  
   simulation_data_t simdata;
-  init_simulation(&simdata, argv[1]);
+  init_simulation(&simdata, argv[1], &my_process);
+
+  printf("Process %d : init ok, starting computation ...\n", my_process->world_rank);
 
   int numtimesteps = floor(simdata.params.maxt / simdata.params.dt);
 
@@ -21,6 +97,12 @@ int main(int argc, const char *argv[]) {
     apply_source(&simdata, tstep);
 
     if (simdata.params.outrate > 0 && (tstep % simdata.params.outrate) == 0) {
+
+      /*RECEPTION POUR RANK 0: pold, vxold, vyold et vzold de chaque sub process ==> world_s : p, vx, vy, vz
+       ET OUTPUT PAR RANG 0
+        RECEPTION DANS LE WORLD
+      */
+
       for (int i = 0; i < simdata.params.numoutputs; i++) {
         data_t *output_data = NULL;
 
@@ -63,10 +145,22 @@ int main(int argc, const char *argv[]) {
       fflush(stdout);
     }
 
+    /*SEND VELOCITY*/
+    /*WAIT FOR VELOCITY*/
+    /*SET RECEIVE OF PRESSURE (for this step) AND VELOCITY (for the next step)*/
+    /*COMPUTE PRESSURE*/
+    /*SEND PRESSURE*/
+    /*COMPUTE VELOCITY*/
+
+    /*SWAP*/
+
     update_pressure(&simdata);
     update_velocities(&simdata);
     swap_timesteps(&simdata);
   }
+
+  printf("Process %d : end ok, will be free ...\n", my_process->world_rank);
+
 
   double elapsed = GET_TIME() - start;
   double numupdates =
@@ -77,6 +171,8 @@ int main(int argc, const char *argv[]) {
          updatespers);
 
   finalize_simulation(&simdata);
+
+  free_world()
 
   return 0;
 }
@@ -748,7 +844,7 @@ int interpolate_inputmaps(simulation_data_t *simdata, grid_t *simgrid,
     for (int n = 0; n < simgrid->numnodesy; n++) {
       for (int m = 0; m < simgrid->numnodesx; m++) {
 
-        /*double x = m * dx;
+        double x = m * dx;
         double y = n * dx;
         double z = p * dx;
 
@@ -805,8 +901,8 @@ int interpolate_inputmaps(simulation_data_t *simdata, grid_t *simgrid,
 
         closest_index(&rhoin->grid, x, y, z, &mc, &nc, &pc);
         SETVALUE(simdata->rhohalf, m, n, p, GETVALUE(rhoin, mc, nc, pc));
-        */
-      
+
+      /*
         // Nearest-neighbor search
 
         double x = m * dx;
@@ -825,7 +921,7 @@ int interpolate_inputmaps(simulation_data_t *simdata, grid_t *simgrid,
 
         closest_index(&rhoin->grid, x, y, z, &mc, &nc, &pc);
         SETVALUE(simdata->rhohalf, m, n, p, GETVALUE(rhoin, mc, nc, pc));
-        
+        */
       }
     }
   }
@@ -948,7 +1044,7 @@ void update_velocities(simulation_data_t *simdata) {
   }
 }
 
-void init_simulation(simulation_data_t *simdata, const char *params_filename) {
+void init_simulation(simulation_data_t *simdata, const char *params_filename, process_s *process) {
   if (read_paramfile(&simdata->params, params_filename) != 0) {
     printf("Failed to read parameters. Aborting...\n\n");
     exit(1);
@@ -957,6 +1053,8 @@ void init_simulation(simulation_data_t *simdata, const char *params_filename) {
   grid_t rhoin_grid;
   grid_t cin_grid;
   grid_t sim_grid;
+
+  grid_t world_grid;
 
   int rho_numstep;
   int c_numstep;
@@ -994,12 +1092,16 @@ void init_simulation(simulation_data_t *simdata, const char *params_filename) {
   fclose(rhofp);
   fclose(cfp);
 
-  sim_grid.xmin = rhoin_grid.xmin;
-  sim_grid.xmax = rhoin_grid.xmax;
-  sim_grid.ymin = rhoin_grid.ymin;
-  sim_grid.ymax = rhoin_grid.ymax;
-  sim_grid.zmin = rhoin_grid.zmin;
-  sim_grid.zmax = rhoin_grid.zmax;
+  int x_size = (rhoin_grid.xmax - rhoin_grid.xmin)/(process->world->dims)[0]
+  int y_size = (rhoin_grid.ymax - rhoin_grid.ymin)/(process->world->dims)[1]
+  int z_size = (rhoin_grid.zmax - rhoin_grid.zmin)/(process->world->dims)[2]
+
+  sim_grid.xmin = rhoin_grid.xmin + x_size*(process->coords)[0];
+  sim_grid.xmax = rhoin_grid.xmin + x_size*(process->coords)[0] + x_size;
+  sim_grid.ymin = rhoin_grid.ymin + y_size*(process->coords)[1];
+  sim_grid.ymax = rhoin_grid.ymin + y_size*(process->coords)[1] + y_size;
+  sim_grid.zmin = rhoin_grid.zmin + z_size*(process->coords)[2];
+  sim_grid.zmax = rhoin_grid.zmin + z_size*(process->coords)[2] + z_size;
 
   sim_grid.numnodesx =
       MAX(floor((sim_grid.xmax - sim_grid.xmin) / simdata->params.dx), 1);
@@ -1014,27 +1116,44 @@ void init_simulation(simulation_data_t *simdata, const char *params_filename) {
     exit(1);
   }
 
-  if (simdata->params.outrate > 0 && simdata->params.outputs != NULL) {
-    for (int i = 0; i < simdata->params.numoutputs; i++) {
-      char *outfilei = simdata->params.outputs[i].filename;
+  if(process->world_rank == 0)
+  {
+    world_grid.xmin = rhoin_grid.xmin;
+    world_grid.xmax = rhoin_grid.xmax;
+    world_grid.ymin = rhoin_grid.ymin;
+    world_grid.ymax = rhoin_grid.ymax;
+    world_grid.zmin = rhoin_grid.zmin;
+    world_grid.zmax = rhoin_grid.zmax;
 
-      for (int j = 0; j < i; j++) {
-        char *outfilej = simdata->params.outputs[j].filename;
+    world_grid.numnodesx =
+      MAX(floor((world_grid.xmax - world_grid.xmin) / simdata->params.dx), 1);
+    world_grid.numnodesy =
+        MAX(floor((world_grid.ymax - world_grid.ymin) / simdata->params.dx), 1);
+    world_grid.numnodesz =
+        MAX(floor((world_grid.zmax - world_grid.zmin) / simdata->params.dx), 1);
+  
+    if (simdata->params.outrate > 0 && simdata->params.outputs != NULL) {
+      for (int i = 0; i < simdata->params.numoutputs; i++) {
+        char *outfilei = simdata->params.outputs[i].filename;
 
-        if (strcmp(outfilei, outfilej) == 0) {
-          printf("Duplicate output file: '%s'. Aborting...\n\n", outfilei);
-          exit(1);
+        for (int j = 0; j < i; j++) {
+          char *outfilej = simdata->params.outputs[j].filename;
+
+          if (strcmp(outfilei, outfilej) == 0) {
+            printf("Duplicate output file: '%s'. Aborting...\n\n", outfilei);
+            exit(1);
+          }
         }
       }
-    }
 
-    for (int i = 0; i < simdata->params.numoutputs; i++) {
-      output_t *output = &simdata->params.outputs[i];
+      for (int i = 0; i < simdata->params.numoutputs; i++) {
+        output_t *output = &simdata->params.outputs[i];
 
-      if (open_outputfile(output, &sim_grid) != 0) {
-        printf("Failed to open output file: '%s'. Aborting...\n\n",
-               output->filename);
-        exit(1);
+        if (open_outputfile(output, &world_grid) != 0) {
+          printf("Failed to open output file: '%s'. Aborting...\n\n",
+                output->filename);
+          exit(1);
+        }
       }
     }
   }
@@ -1061,38 +1180,41 @@ void init_simulation(simulation_data_t *simdata, const char *params_filename) {
   fill_data(simdata->vznew, 0.0);
   fill_data(simdata->vzold, 0.0);
 
-  printf("\n");
-  printf(" Grid spacing: %g\n", simdata->params.dx);
-  printf("  Grid size X: %d\n", sim_grid.numnodesx);
-  printf("  Grid size Y: %d\n", sim_grid.numnodesy);
-  printf("  Grid size Z: %d\n", sim_grid.numnodesz);
-  printf("    Time step: %g\n", simdata->params.dt);
-  printf(" Maximum time: %g\n\n", simdata->params.maxt);
+  if(process->world_rank == 0)
+  {
+    printf("\n");
+    printf(" Grid spacing: %g\n", simdata->params.dx);
+    printf("  Grid size X: %d\n", world_grid.numnodesx);
+    printf("  Grid size Y: %d\n", world_grid.numnodesy);
+    printf("  Grid size Z: %d\n", world_grid.numnodesz);
+    printf("    Time step: %g\n", simdata->params.dt);
+    printf(" Maximum time: %g\n\n", simdata->params.maxt);
 
-  if (simdata->params.outrate > 0 && simdata->params.outputs) {
-    int outsampling =
-        (int)(1.0 / (simdata->params.outrate * simdata->params.dt));
+    if (simdata->params.outrate > 0 && simdata->params.outputs) {
+      int outsampling =
+          (int)(1.0 / (simdata->params.outrate * simdata->params.dt));
 
-    printf("     Output rate: every %d step(s)\n", simdata->params.outrate);
-    printf(" Output sampling: %d Hz\n\n", outsampling);
-    printf(" Output files:\n\n");
+      printf("     Output rate: every %d step(s)\n", simdata->params.outrate);
+      printf(" Output sampling: %d Hz\n\n", outsampling);
+      printf(" Output files:\n\n");
 
-    for (int i = 0; i < simdata->params.numoutputs; i++) {
-      print_output(&simdata->params.outputs[i]);
+      for (int i = 0; i < simdata->params.numoutputs; i++) {
+        print_output(&simdata->params.outputs[i]);
+      }
+
+      printf("\n");
+
+    } else if (simdata->params.outrate < 0) {
+      printf("  Output is disabled (output rate set to 0)\n\n");
+
+    } else {
+      printf("  Output is disabled (not output specified)\n\n");
     }
 
-    printf("\n");
-
-  } else if (simdata->params.outrate < 0) {
-    printf("  Output is disabled (output rate set to 0)\n\n");
-
-  } else {
-    printf("  Output is disabled (not output specified)\n\n");
+    print_source(&simdata->params.source);
+  
+    fflush(stdout);
   }
-
-  print_source(&simdata->params.source);
-
-  fflush(stdout);
 
   free(rho_map->vals);
   free(rho_map);
