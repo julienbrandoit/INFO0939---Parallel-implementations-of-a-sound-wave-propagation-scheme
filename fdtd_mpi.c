@@ -128,38 +128,35 @@ int main(int argc, const char *argv[]) {
       /*RECEPTION POUR RANK 0: pold, vxold, vyold et vzold de chaque sub process ==> world_s : p, vx, vy, vz
        ET OUTPUT PAR RANG 0
         RECEPTION DANS LE WORLD
+
+        USE OF GATHER
       */
 
-      if(&my_process->world_rank == 0)
-      {
-        for (int i = 0; i < simdata.params.numoutputs; i++) {
-          data_t *output_data = NULL;
-
-          switch (simdata.params.outputs[i].source) {
-          case PRESSURE:
-            output_data = my_world.p_out;
-            break;
-          case VELOCITYX:
-            output_data = my_world.vx_out;
-            break;
-          case VELOCITYY:
-            output_data = my_world.vy_out;
-            break;
-          case VELOCITYZ:
-            output_data = my_world.vz_out;
-            break;
-
-          default:
-            break;
-          }
-
+      
+      for (int i = 0; i < simdata.params.numoutputs; i++) {
+        data_t *output_data = NULL;
+        switch (simdata.params.outputs[i].source) {
+        case PRESSURE:
+          output_data = my_world.p_out;
+          break;
+        case VELOCITYX:
+          output_data = my_world.vx_out;
+          break;
+        case VELOCITYY:
+          output_data = my_world.vy_out;
+          break;
+        case VELOCITYZ:
+          output_data = my_world.vz_out;
+          break;
+        default:
+          break;
+        }
+        
+        if(&my_process->world_rank == 0)
+                {
           double time = tstep * simdata.params.dt;
           write_output(&simdata.params.outputs[i], output_data, tstep, time);
         }
-      }else
-      {
-
-      }
     }
 
     if (tstep > 0 && tstep % (numtimesteps / 10) == 0) {
