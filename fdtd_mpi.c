@@ -63,16 +63,20 @@ void init_process(process_s *process, world_s *world, simulation_data_t *simdata
 
 } 
 
-int main(int argc, const char *argv[]) {
-  if (argc < 2) {
-    printf("\nUsage: ./fdtd <param_file>\n\n");
-    exit(1);
+if (argc < 5) {
+      if (world_rank == 0) {
+          printf("\nUsage: mpirun -np N ./fdtd <param_file> <Px> <Py> <Pz>\n\n");
+      }
+      MPI_Finalize();
+      exit(1);
   }
 
   /*INIT MPI*/
   MPI_Init(&argc, &argv);
   
-  int P_x = 5, P_y = 5, P_z = 5;
+  int Px = atoi(argv[2]); 
+  int Py = atoi(argv[3]);
+  int Pz = atoi(argv[4]);
   int dims[3] = {P_x, P_y, P_z};
   int periods[3] = {0,0,0};
   int reorder = 0;
@@ -840,18 +844,26 @@ int interpolate_inputmaps(simulation_data_t *simdata, grid_t *simgrid,
   double dx = simdata->params.dx;
   double dxd2 = simdata->params.dx / 2;
 
+  // Boucle sur chaque noeud de la grille de simulation.
+  // Ces boucles itèrent à travers les trois dimensions de la grille.
   for (int p = 0; p < simgrid->numnodesz; p++) {
     for (int n = 0; n < simgrid->numnodesy; n++) {
       for (int m = 0; m < simgrid->numnodesx; m++) {
 
+        // Calcul des coordonnées réelles (x, y, z) du noeud dans la grille de simulation.
+        // Ces coordonnées sont calculées en multipliant les indices de la grille par l'espacement dx.
         double x = m * dx;
         double y = n * dx;
         double z = p * dx;
 
+        // Trouve les indices les plus proches (mc, nc, pc) dans la grille d'entrée (cin et rhoin).
+        // Ces indices correspondent au point de la grille d'entrée le plus proche des coordonnées (x, y, z).
         int mc, nc, pc;
         closest_index(&cin->grid, x, y, z, &mc, &nc, &pc);
 
         // Interpolation trilinéaire
+        // Récupère les valeurs de vitesse du son (c) et de densité (rho) aux huit coins du cube englobant.
+        // Ces coins sont situés autour du point d'intérêt pour l'interpolation.
         double c000 = GETVALUE(cin, mc, nc, pc);
         double c001 = GETVALUE(cin, mc, nc, pc + 1);
         double c010 = GETVALUE(cin, mc, nc + 1, pc);
@@ -870,10 +882,14 @@ int interpolate_inputmaps(simulation_data_t *simdata, grid_t *simgrid,
         double rho110 = GETVALUE(rhoin, mc + 1, nc + 1, pc);
         double rho111 = GETVALUE(rhoin, mc + 1, nc + 1, pc + 1);
 
+        // Calcul des facteurs de poids (tx, ty, tz) pour l'interpolation.
+        // Ces facteurs représentent la position relative du point d'intérêt à l'intérieur du cube.
         double tx = (x - mc * dx) / dx;
         double ty = (y - nc * dx) / dx;
         double tz = (z - pc * dx) / dx;
 
+        // Interpolation trilinéaire de la vitesse du son (c)/densité (rho) au noeud.
+        // Chaque terme de l'interpolation est un produit de la valeur à un coin et des facteurs de poids.
         double c_interp = c000 * (1 - tx) * (1 - ty) * (1 - tz) +
                          c001 * (1 - tx) * (1 - ty) * tz +
                          c010 * (1 - tx) * ty * (1 - tz) +
