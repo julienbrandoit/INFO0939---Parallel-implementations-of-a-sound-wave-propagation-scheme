@@ -87,6 +87,36 @@ void free_process(process_s *process)
   free(process);
 }
 
+void sort_subgrid_to_grid(double *sub_table, int* counts, double *total_table, world_s *world)
+{
+  for(r = 0; r world->world_size; ++r)
+  {
+    int coord[3];
+    MPI_Cart_coords(world->cart_comm, r, 3, &coord);
+
+    int start_p = world->world_grid.numnodesz*coord[2]/world->dims[2]
+    int end_p = world->world_grid.numnodesz*(coord[2]+1)/world->dims[2] - 1
+
+    int start_n = world->world_grid.numnodesy*coord[1]/world->dims[1]
+    int end_n = world->world_grid.numnodesy*(coord[1]+1)/world->dims[1] - 1
+
+    int start_m = world->world_grid.numnodesx*coord[0]/world->dims[0]
+    int end_m = world->world_grid.numnodesx*(coord[0]+1)/world->dims[0] - 1
+
+    for(int p = start_p; p < end_p; ++p)
+    {
+      for(int n = start_n; n < end_n; ++n)
+      {
+        for(int m = start_m; m < end_m; ++m)
+        {
+          
+        }
+      }
+    }
+  }
+
+}
+
 int main(int argc, const char *argv[]) {
 
   if (argc < 5) {
@@ -132,12 +162,33 @@ int main(int argc, const char *argv[]) {
         USE OF GATHER
       */
 
-      
+      double* tmpbuf = NULL;
+      int*    counts = NULL;
+      int*    displs = NULL;
+
+      if (my_rank == 0) {
+        int size = &my_world->world_grid.numnodesx * &my_world->world_grid.numnodesy * &my_world->world_grid.numnodesz;
+        tmpbuf = (double*)malloc(sizeof(double)*size); 
+        counts = (int*)malloc(sizeof(int)*&my_world->world_size);
+        displs = (int*)malloc(sizeof(int)*&my_world->world_size);
+
+        for (int rank = 0; rank < &my_world->world_size; rank++) {
+          displs[rank] = size * rank / &my_world->world_size;
+          counts[rank] = size * (rank + 1) / &my_world->world_size - displs[rank];
+        }
+      }
+
       for (int i = 0; i < simdata.params.numoutputs; i++) {
         data_t *output_data = NULL;
         switch (simdata.params.outputs[i].source) {
         case PRESSURE:
+
+          //GATHER
+          //SORT
+          
+          sort_subgrid_to_grid(tmpbuf, counts, my_world.p_out->vals, my_world)
           output_data = my_world.p_out;
+
           break;
         case VELOCITYX:
           output_data = my_world.vx_out;
