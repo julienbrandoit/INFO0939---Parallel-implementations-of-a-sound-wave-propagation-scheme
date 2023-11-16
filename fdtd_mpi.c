@@ -37,6 +37,25 @@ void init_world(world_s *world, int[3] dims, int[3] periods, int reorder)
 
 } 
 
+void free_world(world_s *world)
+{
+  MPI_Comm_free(&(world->cart_comm));
+
+  free(world->p_out->vals)
+  free(world->p_out)
+
+  free(world->vx_out->vals)
+  free(world->vx_out)
+
+  free(world->vy_out->vals)
+  free(world->vy_out)
+
+  free(world->vz_out->vals)
+  free(world->vz_out)
+
+  free(world);
+}
+
 void init_process(process_s *process, world_s *world, simulation_data_t *simdata)
 {
   process = malloc(sizeof(process_s));
@@ -63,7 +82,14 @@ void init_process(process_s *process, world_s *world, simulation_data_t *simdata
 
 } 
 
-if (argc < 5) {
+void free_process(process_s *process)
+{
+  free(process);
+}
+
+int main(int argc, const char *argv[]) {
+
+  if (argc < 5) {
       if (world_rank == 0) {
           printf("\nUsage: mpirun -np N ./fdtd <param_file> <Px> <Py> <Pz>\n\n");
       }
@@ -86,8 +112,6 @@ if (argc < 5) {
 
   process_s my_process;
   init_process(&my_process, &my_world, &simdata);
-
-  //WORLD_GRID : tableau de data_t pour les outputs
   
   simulation_data_t simdata;
   init_simulation(&simdata, argv[1], &my_process);
@@ -101,36 +125,38 @@ if (argc < 5) {
     apply_source(&simdata, tstep);
 
     if (simdata.params.outrate > 0 && (tstep % simdata.params.outrate) == 0) {
-
       /*RECEPTION POUR RANK 0: pold, vxold, vyold et vzold de chaque sub process ==> world_s : p, vx, vy, vz
        ET OUTPUT PAR RANG 0
         RECEPTION DANS LE WORLD
+
+        USE OF GATHER
       */
 
+      
       for (int i = 0; i < simdata.params.numoutputs; i++) {
         data_t *output_data = NULL;
-
         switch (simdata.params.outputs[i].source) {
         case PRESSURE:
-          output_data = simdata.pold;
+          output_data = my_world.p_out;
           break;
         case VELOCITYX:
-          output_data = simdata.vxold;
+          output_data = my_world.vx_out;
           break;
         case VELOCITYY:
-          output_data = simdata.vyold;
+          output_data = my_world.vy_out;
           break;
         case VELOCITYZ:
-          output_data = simdata.vzold;
+          output_data = my_world.vz_out;
           break;
-
         default:
           break;
         }
-
-        double time = tstep * simdata.params.dt;
-        write_output(&simdata.params.outputs[i], output_data, tstep, time);
-      }
+        
+        if(&my_process->world_rank == 0)
+                {
+          double time = tstep * simdata.params.dt;
+          write_output(&simdata.params.outputs[i], output_data, tstep, time);
+        }
     }
 
     if (tstep > 0 && tstep % (numtimesteps / 10) == 0) {
@@ -176,7 +202,10 @@ if (argc < 5) {
 
   finalize_simulation(&simdata);
 
-  free_world()
+  free_process(&my_process);
+  free_world(&my_world);
+
+  MPI_Finalize();
 
   return 0;
 }
@@ -1178,6 +1207,19 @@ void init_simulation(simulation_data_t *simdata, const char *params_filename, pr
     }
 
     process->world->world_grid = world_grid
+
+    if ((process->world->p_out = allocate_data(&world_grid)) == NULL ||
+      (process->world->vx_out = allocate_data(&world_grid)) == NULL ||
+      (process->world->vy_out = allocate_data(&world_grid)) == NULL ||
+      (process->world->vz_out = allocate_data(&world_grid)) == NULL) {
+      printf("Failed to allocate memory. Aborting...\n\n");
+      exit(1);
+    }
+
+    fill_data(process->world->p_out, 0.0);
+    fill_data(process->world->vx_out, 0.0);
+    fill_data(process->world->vy_out, 0.0);
+    fill_data(process->world->vz_out, 0.0);
   }
 
   if ((simdata->pold = allocate_data(&sim_grid)) == NULL ||
