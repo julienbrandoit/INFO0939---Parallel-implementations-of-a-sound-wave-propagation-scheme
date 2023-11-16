@@ -11,7 +11,8 @@ void init_world(world_s *world, int[3] dims, int[3] periods, int reorder)
   world = malloc(sizeof(world_s));
   if(!world)
   {
-    //ERREUR
+    fprintf(stderr, "Error: Memory allocation for world failed \n");
+    MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE); // Arrête tous les processus MPI.
   }
 
   (world->dims)[0] = dims[0]
@@ -56,12 +57,13 @@ void free_world(world_s *world)
   free(world);
 }
 
-void init_process(process_s *process, world_s *world, simulation_data_t *simdata)
+void init_process(process_s *process, world_s *world, simulation_data_t *simdata)// on utilise pas simdata ?
 {
   process = malloc(sizeof(process_s));
   if(!process)
   {
-    //ERREUR
+    fprintf(stderr, "Error: Memory allocation for process failed!\n");
+    MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
   }
 
   process_s->world = world;
@@ -78,7 +80,7 @@ void init_process(process_s *process, world_s *world, simulation_data_t *simdata
   MPI_Cart_shift(world.cart_comm, 2, 1, 
                   &(process->neighbors)[FORWARD], &(process->neighbors)[BACKWARD]);
 
-  printf("Process : rank = %d, coords = (%d, %d)\n", process->world_rank, process->coords[0], process->coords[1]);
+  printf("Process : rank = %d, coords = (%d, %d)\n", process->world_rank, process->coords[0], process->coords[1]);// Pourquoi que 2 coord ? 
 
 } 
 
@@ -133,6 +135,7 @@ int main(int argc, const char *argv[]) {
   int Px = atoi(argv[2]); 
   int Py = atoi(argv[3]);
   int Pz = atoi(argv[4]);
+  
   int dims[3] = {P_x, P_y, P_z};
   int periods[3] = {0,0,0};
   int reorder = 0;
@@ -208,6 +211,7 @@ int main(int argc, const char *argv[]) {
           double time = tstep * simdata.params.dt;
           write_output(&simdata.params.outputs[i], output_data, tstep, time);
         }
+      }
     }
 
     if (tstep > 0 && tstep % (numtimesteps / 10) == 0) {
@@ -260,6 +264,7 @@ int main(int argc, const char *argv[]) {
 
   return 0;
 }
+
 
 /******************************************************************************
  * Utilities functions                                                        *
@@ -929,7 +934,7 @@ int interpolate_inputmaps(simulation_data_t *simdata, grid_t *simgrid,
   for (int p = 0; p < simgrid->numnodesz; p++) {
     for (int n = 0; n < simgrid->numnodesy; n++) {
       for (int m = 0; m < simgrid->numnodesx; m++) {
-
+        
         // Calcul des coordonnées réelles (x, y, z) du noeud dans la grille de simulation.
         // Ces coordonnées sont calculées en multipliant les indices de la grille par l'espacement dx.
         double x = m * dx;
@@ -941,6 +946,11 @@ int interpolate_inputmaps(simulation_data_t *simdata, grid_t *simgrid,
         int mc, nc, pc;
         closest_index(&cin->grid, x, y, z, &mc, &nc, &pc);
 
+        // Gestion des bords de la grille
+        mc = MIN(mc, cin->grid.numnodesx - 2);
+        nc = MIN(nc, cin->grid.numnodesy - 2);
+        pc = MIN(pc, cin->grid.numnodesz - 2);
+      
         // Interpolation trilinéaire
         // Récupère les valeurs de vitesse du son (c) et de densité (rho) aux huit coins du cube englobant.
         // Ces coins sont situés autour du point d'intérêt pour l'interpolation.
@@ -987,7 +997,6 @@ int interpolate_inputmaps(simulation_data_t *simdata, grid_t *simgrid,
                             rho101 * tx * (1 - ty) * tz +
                             rho110 * tx * ty * (1 - tz) +
                             rho111 * tx * ty * tz;
-
         SETVALUE(simdata->c, m, n, p, c_interp);
         SETVALUE(simdata->rho, m, n, p, rho_interp);
 
