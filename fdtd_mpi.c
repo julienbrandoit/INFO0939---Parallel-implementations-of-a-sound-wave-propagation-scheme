@@ -11,7 +11,8 @@ void init_world(world_s *world, int[3] dims, int[3] periods, int reorder)
   world = malloc(sizeof(world_s));
   if(!world)
   {
-    //ERREUR
+    fprintf(stderr, "Error: Memory allocation for world failed \n");
+    MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE); // Arrête tous les processus MPI.
   }
 
   (world->dims)[0] = dims[0]
@@ -56,12 +57,13 @@ void free_world(world_s *world)
   free(world);
 }
 
-void init_process(process_s *process, world_s *world, simulation_data_t *simdata)
+void init_process(process_s *process, world_s *world, simulation_data_t *simdata)// on utilise pas simdata ?
 {
   process = malloc(sizeof(process_s));
   if(!process)
   {
-    //ERREUR
+    fprintf(stderr, "Error: Memory allocation for process failed!\n");
+    MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
   }
 
   process_s->world = world;
@@ -78,7 +80,7 @@ void init_process(process_s *process, world_s *world, simulation_data_t *simdata
   MPI_Cart_shift(world.cart_comm, 2, 1, 
                   &(process->neighbors)[FORWARD], &(process->neighbors)[BACKWARD]);
 
-  printf("Process : rank = %d, coords = (%d, %d)\n", process->world_rank, process->coords[0], process->coords[1]);
+  printf("Process : rank = %d, coords = (%d, %d)\n", process->world_rank, process->coords[0], process->coords[1]);// Pourquoi que 2 coord ? 
 
 } 
 
@@ -103,6 +105,7 @@ int main(int argc, const char *argv[]) {
   int Px = atoi(argv[2]); 
   int Py = atoi(argv[3]);
   int Pz = atoi(argv[4]);
+  
   int dims[3] = {P_x, P_y, P_z};
   int periods[3] = {0,0,0};
   int reorder = 0;
