@@ -157,6 +157,7 @@ int main(int argc, const char *argv[]) {
           double time = tstep * simdata.params.dt;
           write_output(&simdata.params.outputs[i], output_data, tstep, time);
         }
+      }
     }
 
     if (tstep > 0 && tstep % (numtimesteps / 10) == 0) {
@@ -209,6 +210,7 @@ int main(int argc, const char *argv[]) {
 
   return 0;
 }
+
 
 /******************************************************************************
  * Utilities functions                                                        *
