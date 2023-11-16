@@ -849,7 +849,7 @@ int interpolate_inputmaps(simulation_data_t *simdata, grid_t *simgrid,
   for (int p = 0; p < simgrid->numnodesz; p++) {
     for (int n = 0; n < simgrid->numnodesy; n++) {
       for (int m = 0; m < simgrid->numnodesx; m++) {
-
+        
         // Calcul des coordonnées réelles (x, y, z) du noeud dans la grille de simulation.
         // Ces coordonnées sont calculées en multipliant les indices de la grille par l'espacement dx.
         double x = m * dx;
@@ -861,6 +861,11 @@ int interpolate_inputmaps(simulation_data_t *simdata, grid_t *simgrid,
         int mc, nc, pc;
         closest_index(&cin->grid, x, y, z, &mc, &nc, &pc);
 
+        // Gestion des bords de la grille
+        mc = MIN(mc, cin->grid.numnodesx - 2);
+        nc = MIN(nc, cin->grid.numnodesy - 2);
+        pc = MIN(pc, cin->grid.numnodesz - 2);
+      
         // Interpolation trilinéaire
         // Récupère les valeurs de vitesse du son (c) et de densité (rho) aux huit coins du cube englobant.
         // Ces coins sont situés autour du point d'intérêt pour l'interpolation.
@@ -907,7 +912,6 @@ int interpolate_inputmaps(simulation_data_t *simdata, grid_t *simgrid,
                             rho101 * tx * (1 - ty) * tz +
                             rho110 * tx * ty * (1 - tz) +
                             rho111 * tx * ty * tz;
-
         SETVALUE(simdata->c, m, n, p, c_interp);
         SETVALUE(simdata->rho, m, n, p, rho_interp);
 
