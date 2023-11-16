@@ -98,19 +98,28 @@ void sort_subgrid_to_grid(double *sub_table, int* counts, double *total_table, w
     int start_p = world->world_grid.numnodesz*coord[2]/world->dims[2]
     int end_p = world->world_grid.numnodesz*(coord[2]+1)/world->dims[2] - 1
 
+    int size_p = end_p - start_p
+
     int start_n = world->world_grid.numnodesy*coord[1]/world->dims[1]
     int end_n = world->world_grid.numnodesy*(coord[1]+1)/world->dims[1] - 1
+
+    int size_n = end_n - start_n
 
     int start_m = world->world_grid.numnodesx*coord[0]/world->dims[0]
     int end_m = world->world_grid.numnodesx*(coord[0]+1)/world->dims[0] - 1
 
-    for(int p = start_p; p < end_p; ++p)
+    int size_m = end_m - start_m
+
+    for(int p = 0; p < size_p; ++p)
     {
-      for(int n = start_n; n < end_n; ++n)
+      for(int n = 0; n < size_n; ++n)
       {
-        for(int m = start_m; m < end_m; ++m)
+        for(int m = 0; m < size_m; ++m)
         {
-          
+          m_world = m + start_m;
+          n_world = n + start_n;
+          p_world = p + start_p;
+          total_table[INDEX3D(world->world_grid, m_world, n_world, p_world)] = sub_table[size_n * size_m * p + size_m * n + m];
         }
       }
     }
