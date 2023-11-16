@@ -80,8 +80,7 @@ void init_process(process_s *process, world_s *world, simulation_data_t *simdata
   MPI_Cart_shift(world.cart_comm, 2, 1, 
                   &(process->neighbors)[FORWARD], &(process->neighbors)[BACKWARD]);
 
-  printf("Process : rank = %d, coords = (%d, %d)\n", process->world_rank, process->coords[0], process->coords[1]);// Pourquoi que 2 coord ? 
-
+  printf("Process : rank = %d, coords = (%d, %d, %d)\n", process->world_rank, process->coords[0], process->coords[1], process->coords[2]); 
 } 
 
 void free_process(process_s *process)
