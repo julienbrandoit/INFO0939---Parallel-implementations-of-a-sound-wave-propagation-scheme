@@ -88,6 +88,30 @@ void free_process(process_s *process)
   free(process);
 }
 
+void size_process(int coords[3], world_s *world, int table[3*3])
+{
+  int start_p = world->world_grid.numnodesz*coord[2]/world->dims[2];
+  int end_p = world->world_grid.numnodesz*(coord[2]+1)/world->dims[2] - 1;
+  
+  table[8] = end_p;
+  table[7] = start_p;
+  table[6] = end_p - start_p;
+
+  int start_n = world->world_grid.numnodesy*coord[1]/world->dims[1];
+  int end_n = world->world_grid.numnodesy*(coord[1]+1)/world->dims[1] - 1;
+
+  table[5] = end_n;
+  table[4] = start_n;
+  table[3] = end_n - start_n;
+
+  int start_m = world->world_grid.numnodesx*coord[0]/world->dims[0];
+  int end_m = world->world_grid.numnodesx*(coord[0]+1)/world->dims[0] - 1;
+
+  table[2] = end_m;
+  table[1] = start_m;
+  table[0] = end_m - start_m;
+}
+
 void sort_subgrid_to_grid(double *sub_table, int* counts, double *total_table, world_s *world)
 {
   for(int r = 0; r < world->world_size; ++r)
@@ -95,31 +119,19 @@ void sort_subgrid_to_grid(double *sub_table, int* counts, double *total_table, w
     int coord[3];
     MPI_Cart_coords(world->cart_comm, r, 3, coord);
 
-    int start_p = world->world_grid.numnodesz*coord[2]/world->dims[2];
-    int end_p = world->world_grid.numnodesz*(coord[2]+1)/world->dims[2] - 1;
+    int table[9];
+    size_process(coords, world, table);
 
-    int size_p = end_p - start_p;
-
-    int start_n = world->world_grid.numnodesy*coord[1]/world->dims[1];
-    int end_n = world->world_grid.numnodesy*(coord[1]+1)/world->dims[1] - 1;
-
-    int size_n = end_n - start_n;
-
-    int start_m = world->world_grid.numnodesx*coord[0]/world->dims[0];
-    int end_m = world->world_grid.numnodesx*(coord[0]+1)/world->dims[0] - 1;
-
-    int size_m = end_m - start_m;
-
-    for(int p = 0; p < size_p; ++p)
+    for(int p = 0; p < table[6]; ++p)
     {
-      for(int n = 0; n < size_n; ++n)
+      for(int n = 0; n < table[3]; ++n)
       {
-        for(int m = 0; m < size_m; ++m)
+        for(int m = 0; m < table[0]; ++m)
         {
-          int m_world = m + start_m;
-          int n_world = n + start_n;
-          int p_world = p + start_p;
-          total_table[INDEX3D(world->world_grid, m_world, n_world, p_world)] = sub_table[size_n * size_m * p + size_m * n + m];
+          int m_world = m + table[1];
+          int n_world = n + table[4];
+          int p_world = p + table[7];
+          total_table[INDEX3D(world->world_grid, m_world, n_world, p_world)] = sub_table[table[3] * table[0] * p + table[0] * n + m];
         }
       }
     }
@@ -173,6 +185,9 @@ int main(int argc, const char *argv[]) {
       double* tmpbuf = NULL;
       int*    counts = NULL;
       int*    displs = NULL;
+      
+      int my_size[9];
+      process_size(&my_process->my_rank, &my_world, my_size)
 
       if (&my_process->my_rank == 0) {
         int size = &my_world->world_grid.numnodesx * &my_world->world_grid.numnodesy * &my_world->world_grid.numnodesz;
@@ -181,9 +196,10 @@ int main(int argc, const char *argv[]) {
         displs = (int*)malloc(sizeof(int)*&my_world->world_size);
 
         for (int rank = 0; rank < &my_world->world_size; rank++) {
-          //UTILISER LA FCT DE CHARLOTTE, ADAPTER CE CODE : On ne veut pas size * ; on veut size_x, size_y, size_z
-          displs[rank] = size * rank / &my_world->world_size;
-          counts[rank] = size * (rank + 1) / &my_world->world_size - displs[rank];
+          int rank_size[9];
+          process_size(rank, &my_world, rank_size);
+          displs[rank] = rank == 0 ? 0 : displs[rank-1] + counts [rank-1];
+          counts[rank] = rank_size[0] * rank_size[3] * rank_size[6];
         }
       }
 
@@ -191,22 +207,28 @@ int main(int argc, const char *argv[]) {
         data_t *output_data = NULL;
         switch (simdata.params.outputs[i].source) {
         case PRESSURE:
-
-          //GATHER
-          //SORT
-          MPI_Gatherv(simdata.pold.vals, MPI_Count sendcount , MPI_DOUBLE, tmpbuf, counts, displs, MPI_DOUBLE, 0, &my_world->cart_comm);
+          MPI_Gatherv(simdata.pold.vals, my_size[0] * my_size[3] * my_size[6], MPI_DOUBLE, tmpbuf, counts, displs, MPI_DOUBLE, 0, &my_world->cart_comm);
           sort_subgrid_to_grid(tmpbuf, counts, my_world.p_out->vals, my_world)
           output_data = my_world.p_out;
 
           break;
         case VELOCITYX:
+          MPI_Gatherv(simdata.vxold.vals, my_size[0] * my_size[3] * my_size[6], MPI_DOUBLE, tmpbuf, counts, displs, MPI_DOUBLE, 0, &my_world->cart_comm);
+          sort_subgrid_to_grid(tmpbuf, counts, my_world.vx_out->vals, my_world)
           output_data = my_world.vx_out;
+
           break;
         case VELOCITYY:
+          MPI_Gatherv(simdata.vyold.vals, my_size[0] * my_size[3] * my_size[6], MPI_DOUBLE, tmpbuf, counts, displs, MPI_DOUBLE, 0, &my_world->cart_comm);
+          sort_subgrid_to_grid(tmpbuf, counts, my_world.vy_out->vals, my_world)
           output_data = my_world.vy_out;
+          
           break;
         case VELOCITYZ:
+          MPI_Gatherv(simdata.vzold.vals, my_size[0] * my_size[3] * my_size[6], MPI_DOUBLE, tmpbuf, counts, displs, MPI_DOUBLE, 0, &my_world->cart_comm);
+          sort_subgrid_to_grid(tmpbuf, counts, my_world.vz_out->vals, my_world)
           output_data = my_world.vz_out;
+
           break;
         default:
           break;
@@ -220,22 +242,24 @@ int main(int argc, const char *argv[]) {
       }
     }
 
-    if (tstep > 0 && tstep % (numtimesteps / 10) == 0) {
-      printf("step %8d/%d", tstep, numtimesteps);
+    if (&my_process->my_rank == 0) {
+      if (tstep > 0 && tstep % (numtimesteps / 10) == 0) {
+        printf("step %8d/%d", tstep, numtimesteps);
 
-      if (tstep != numtimesteps) {
-        double elapsed_sofar = GET_TIME() - start;
-        double timeperstep_sofar = elapsed_sofar / tstep;
+        if (tstep != numtimesteps) {
+          double elapsed_sofar = GET_TIME() - start;
+          double timeperstep_sofar = elapsed_sofar / tstep;
 
-        double eta = (numtimesteps - tstep) * timeperstep_sofar;
+          double eta = (numtimesteps - tstep) * timeperstep_sofar;
 
-        printf(" (ETA: %8.3lf seconds)", eta);
+          printf(" (ETA: %8.3lf seconds)", eta);
+        }
+
+        printf("\n");
+        fflush(stdout);
       }
-
-      printf("\n");
-      fflush(stdout);
     }
-
+    
     /*SEND VELOCITY*/
     /*WAIT FOR VELOCITY*/
     /*SET RECEIVE OF PRESSURE (for this step) AND VELOCITY (for the next step)*/
