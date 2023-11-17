@@ -59,13 +59,29 @@ void free_world(world_s *world)
 
 void init_process(process_s *process, world_s *world, simulation_data_t *simdata)// on utilise pas simdata ?
 {
-  process = malloc(sizeof(process_s));
+  process_size = sizeof(process_s);
+
+  process = malloc(process_size);
   if(!process)
   {
     fprintf(stderr, "Error: Memory allocation for process failed!\n");
     MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
   }
 
+  size_direction = size_process(process->coords, world);
+  process_s->p_bdy[0] = malloc(sizeof(double)*size_direction[1]*size_direction[2]);
+  process_s->p_bdy[1] = malloc(sizeof(double)*size_direction[0]*size_direction[2]);
+  process_s->p_bdy[2] = malloc(sizeof(double)*size_direction[0]*size_direction[1]);
+  process_s->vx_bdy = malloc(sizeof(double)*size_direction[1]*size_direction[2]);
+  process_s->vy_bdy = malloc(sizeof(double)*size_direction[0]*size_direction[2]);
+  process_s->vz_bdy = malloc(sizeof(double)*size_direction[0]*size_direction[1]);
+  if ((process->world->p_out = allocate_data(&world_grid)) == NULL ||
+      (process->world->vx_out = allocate_data(&world_grid)) == NULL ||
+      (process->world->vy_out = allocate_data(&world_grid)) == NULL ||
+      (process->world->vz_out = allocate_data(&world_grid)) == NULL) {
+      printf("Failed to allocate memory. Aborting...\n\n");
+      exit(1);
+    }
   process_s->world = world;
 
   MPI_Comm_rank(MPI_COMM_WORLD , &(process->world_rank));
@@ -88,6 +104,32 @@ void free_process(process_s *process)
   free(process);
 }
 
+int*size_process(int *coords, world_s *world)
+{
+  int*size = malloc(sizeof(int)*3);
+  if(!size)
+  {
+    fprintf(stderr, "Error: Memory allocation for size failed!\n");
+    MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+  }
+
+  int start_p = world->world_grid.numnodesz*coord[2]/world->dims[2]
+  int end_p = world->world_grid.numnodesz*(coord[2]+1)/world->dims[2] - 1
+
+  size[0] = end_p - start_p
+
+  int start_n = world->world_grid.numnodesy*coord[1]/world->dims[1]
+  int end_n = world->world_grid.numnodesy*(coord[1]+1)/world->dims[1] - 1
+
+  size[1] = end_n - start_n
+
+  int start_m = world->world_grid.numnodesx*coord[0]/world->dims[0]
+  int end_m = world->world_grid.numnodesx*(coord[0]+1)/world->dims[0] - 1
+
+  size[2] = end_m - start_m
+
+  return size;
+}
 void sort_subgrid_to_grid(double *sub_table, int* counts, double *total_table, world_s *world)
 {
   for(r = 0; r world->world_size; ++r)
