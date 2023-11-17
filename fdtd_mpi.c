@@ -104,31 +104,28 @@ void free_process(process_s *process)
   free(process);
 }
 
-int*size_process(int *coords, world_s *world)
+void size_process(int *coords, world_s *world, int table[3*3])
 {
-  int*size = malloc(sizeof(int)*3);
-  if(!size)
-  {
-    fprintf(stderr, "Error: Memory allocation for size failed!\n");
-    MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
-  }
+  int start_p = world->world_grid.numnodesz*coord[2]/world->dims[2];
+  int end_p = world->world_grid.numnodesz*(coord[2]+1)/world->dims[2] - 1;
+  
+  table[8] = end_p;
+  table[7] = start_p;
+  table[6] = end_p - start_p;
 
-  int start_p = world->world_grid.numnodesz*coord[2]/world->dims[2]
-  int end_p = world->world_grid.numnodesz*(coord[2]+1)/world->dims[2] - 1
+  int start_n = world->world_grid.numnodesy*coord[1]/world->dims[1];
+  int end_n = world->world_grid.numnodesy*(coord[1]+1)/world->dims[1] - 1;
 
-  size[0] = end_p - start_p
+  table[5] = end_n;
+  table[4] = start_n;
+  table[3] = end_n - start_n;
 
-  int start_n = world->world_grid.numnodesy*coord[1]/world->dims[1]
-  int end_n = world->world_grid.numnodesy*(coord[1]+1)/world->dims[1] - 1
+  int start_m = world->world_grid.numnodesx*coord[0]/world->dims[0];
+  int end_m = world->world_grid.numnodesx*(coord[0]+1)/world->dims[0] - 1;
 
-  size[1] = end_n - start_n
-
-  int start_m = world->world_grid.numnodesx*coord[0]/world->dims[0]
-  int end_m = world->world_grid.numnodesx*(coord[0]+1)/world->dims[0] - 1
-
-  size[2] = end_m - start_m
-
-  return size;
+  table[2] = end_m;
+  table[1] = start_m;
+  table[0] = end_m - start_m;
 }
 void sort_subgrid_to_grid(double *sub_table, int* counts, double *total_table, world_s *world)
 {
