@@ -60,7 +60,7 @@ void free_world(world_s *world)
 void init_process(process_s *process, world_s *world, simulation_data_t *simdata)// on utilise pas simdata ?
 {
   process_size = sizeof(process_s);
-
+  int size_direction[3*3]; //{size m, start m, end m, size n }
   process = malloc(process_size);
   if(!process)
   {
@@ -68,20 +68,6 @@ void init_process(process_s *process, world_s *world, simulation_data_t *simdata
     MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
   }
 
-  size_direction = size_process(process->coords, world);
-  process_s->p_bdy[0] = malloc(sizeof(double)*size_direction[1]*size_direction[2]);
-  process_s->p_bdy[1] = malloc(sizeof(double)*size_direction[0]*size_direction[2]);
-  process_s->p_bdy[2] = malloc(sizeof(double)*size_direction[0]*size_direction[1]);
-  process_s->vx_bdy = malloc(sizeof(double)*size_direction[1]*size_direction[2]);
-  process_s->vy_bdy = malloc(sizeof(double)*size_direction[0]*size_direction[2]);
-  process_s->vz_bdy = malloc(sizeof(double)*size_direction[0]*size_direction[1]);
-  if ((process->world->p_out = allocate_data(&world_grid)) == NULL ||
-      (process->world->vx_out = allocate_data(&world_grid)) == NULL ||
-      (process->world->vy_out = allocate_data(&world_grid)) == NULL ||
-      (process->world->vz_out = allocate_data(&world_grid)) == NULL) {
-      printf("Failed to allocate memory. Aborting...\n\n");
-      exit(1);
-    }
   process_s->world = world;
 
   MPI_Comm_rank(MPI_COMM_WORLD , &(process->world_rank));
@@ -95,7 +81,19 @@ void init_process(process_s *process, world_s *world, simulation_data_t *simdata
                   &(process->neighbors)[LEFT], &(process->neighbors)[RIGHT]);
   MPI_Cart_shift(world.cart_comm, 2, 1, 
                   &(process->neighbors)[FORWARD], &(process->neighbors)[BACKWARD]);
-
+                  
+  size_direction = size_process(process->coords, world, size_direction);
+  process_s->p_bdy[0] = malloc(sizeof(double)*size_direction[3]*size_direction[6]);
+  process_s->p_bdy[1] = malloc(sizeof(double)*size_direction[0]*size_direction[6]);
+  process_s->p_bdy[2] = malloc(sizeof(double)*size_direction[0]*size_direction[3]);
+  process_s->vx_bdy = malloc(sizeof(double)*size_direction[3]*size_direction[6]);
+  process_s->vy_bdy = malloc(sizeof(double)*size_direction[0]*size_direction[6]);
+  process_s->vz_bdy = malloc(sizeof(double)*size_direction[0]*size_direction[3]);
+  if (!process_s->p_bdy[0]|| !process_s->p_bdy[1]|| !process_s->p_bdy[2]|| !process_s->vx_bdy|| !process_s->vy_bdy|| !process_s->vz_bdy ) 
+  {
+      printf("Failed to allocate memory. Aborting...\n\n");
+      exit(1);
+    }
   printf("Process : rank = %d, coords = (%d, %d, %d)\n", process->world_rank, process->coords[0], process->coords[1], process->coords[2]); 
 } 
 
