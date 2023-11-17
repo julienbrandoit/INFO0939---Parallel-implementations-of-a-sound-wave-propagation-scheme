@@ -101,7 +101,10 @@ typedef struct process {
   int world_rank;
   int cart_rank;
 
-  double **p_bdy;
+  double **px_bdy;
+  double **py_bdy;
+  double **pz_bdy;
+
   double *vx_bdy;
   double *vy_bdy;
   double *vz_bdy;

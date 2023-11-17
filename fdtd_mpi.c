@@ -81,19 +81,31 @@ void init_process(process_s *process, world_s *world, simulation_data_t *simdata
                   &(process->neighbors)[LEFT], &(process->neighbors)[RIGHT]);
   MPI_Cart_shift(world.cart_comm, 2, 1, 
                   &(process->neighbors)[FORWARD], &(process->neighbors)[BACKWARD]);
-                  
+
   size_direction = size_process(process->coords, world, size_direction);
-  process_s->p_bdy[0] = malloc(sizeof(double)*size_direction[3]*size_direction[6]);
-  process_s->p_bdy[1] = malloc(sizeof(double)*size_direction[0]*size_direction[6]);
-  process_s->p_bdy[2] = malloc(sizeof(double)*size_direction[0]*size_direction[3]);
+  process_s->px_bdy = malloc(sizeof(double*)*2);
+  process_s->py_bdy = malloc(sizeof(double*)*2);
+  process_s->pz_bdy = malloc(sizeof(double*)*2);
+  if(!process_s->px_bdy || !process_s->py_bdy || !process_s->pz_bdy)
+  {
+    fprintf(stderr, "Error: Memory allocation for process failed!\n");
+    MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+  }
+  process_s->px_bdy[0] = malloc(sizeof(double)*size_direction[3]*size_direction[6]);
+  process_s->px_bdy[1] = malloc(sizeof(double)*size_direction[3]*size_direction[6]);
+  process_s->py_bdy[0] = malloc(sizeof(double)*size_direction[0]*size_direction[6]);
+  process_s->py_bdy[1] = malloc(sizeof(double)*size_direction[0]*size_direction[6]);
+  process_s->pz_bdy[0] = malloc(sizeof(double)*size_direction[0]*size_direction[3]);
+  process_s->pz_bdy[1] = malloc(sizeof(double)*size_direction[0]*size_direction[3]);
   process_s->vx_bdy = malloc(sizeof(double)*size_direction[3]*size_direction[6]);
   process_s->vy_bdy = malloc(sizeof(double)*size_direction[0]*size_direction[6]);
   process_s->vz_bdy = malloc(sizeof(double)*size_direction[0]*size_direction[3]);
-  if (!process_s->p_bdy[0]|| !process_s->p_bdy[1]|| !process_s->p_bdy[2]|| !process_s->vx_bdy|| !process_s->vy_bdy|| !process_s->vz_bdy ) 
+  if(!(process_s->px_bdy[0])||!(process_s->px_bdy[1])||!(process_s->py_bdy[0])||!(process_s->py_bdy[1])||!(process_s->pz_bdy[0])||!(process_s->pz_bdy[1])||!(process_s->vx_bdy)||!(process_s->vy_bdy)||!(process_s->vz_bdy))
   {
-      printf("Failed to allocate memory. Aborting...\n\n");
-      exit(1);
-    }
+    fprintf(stderr, "Error: Memory allocation for process failed!\n");
+    MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+  }
+
   printf("Process : rank = %d, coords = (%d, %d, %d)\n", process->world_rank, process->coords[0], process->coords[1], process->coords[2]); 
 } 
 
@@ -1103,7 +1115,7 @@ void apply_source(simulation_data_t *simdata, int step) {
   }
 }
 
-void update_pressure(simulation_data_t *simdata) {
+void update_pressure(simulation_data_t *simdata, process_t *process) {
   const double dtdx = simdata->params.dt / simdata->params.dx;
 
   const int numnodesx = NUMNODESX(simdata->pold);
@@ -1121,10 +1133,77 @@ void update_pressure(simulation_data_t *simdata) {
 
   We gain a factor of about 5 time faster !!
   */
-
+  MPI_Request requestx;
+  MPI_Request requesty;
+  MPI_Request requestz;
+    
+  int m = numnodesx - 1;
   for (int p = 0; p < numnodesz; p++) {
     for (int n = 0; n < numnodesy; n++) {
-      for (int m = 0; m < numnodesx; m++) {
+        double rhoc2dtdx = GETVALUE(simdata->rho, m, n, p) *
+                           GETVALUE(simdata->c, m, n, p) *
+                           GETVALUE(simdata->c, m, n, p) * dtdx;
+        double dvx = GETVALUE(simdata->vxold, m, n, p);
+        double dvy = GETVALUE(simdata->vyold, m, n, p);
+        double dvz = GETVALUE(simdata->vzold, m, n, p);
+
+        dvx -= m > 0 ? GETVALUE(simdata->vxold, m - 1, n, p) : 0.0;
+        dvy -= n > 0 ? GETVALUE(simdata->vyold, m, n - 1, p) : 0.0;
+        dvz -= p > 0 ? GETVALUE(simdata->vzold, m, n, p - 1) : 0.0;
+
+        process.px_bdy[0][p*numnodesy+n] = GETVALUE(simdata->pold, m, n, p);
+      
+        SETVALUE(simdata->pnew, m, n, p,
+                 GETVALUE(simdata->pold, m, n, p) - rhoc2dtdx * (dvx + dvy + dvz));
+    }
+  }
+  MPI_Isend(process.px_bdy[0], numnodesy*numnodesz, MPI_DOUBLE, process.neighbors[LEFT], 0, process->world->cart_comm, &requestx);
+  int n = numnodesy - 1;
+  for (int p = 0; p < numnodesz; p++) {
+    for (int m = 0; m < numnodesx; m++) {
+        double rhoc2dtdx = GETVALUE(simdata->rho, m, n, p) *
+                           GETVALUE(simdata->c, m, n, p) *
+                           GETVALUE(simdata->c, m, n, p) * dtdx;
+        double dvx = GETVALUE(simdata->vxold, m, n, p);
+        double dvy = GETVALUE(simdata->vyold, m, n, p);
+        double dvz = GETVALUE(simdata->vzold, m, n, p);
+
+        dvx -= m > 0 ? GETVALUE(simdata->vxold, m - 1, n, p) : 0.0;
+        dvy -= n > 0 ? GETVALUE(simdata->vyold, m, n - 1, p) : 0.0;
+        dvz -= p > 0 ? GETVALUE(simdata->vzold, m, n, p - 1) : 0.0;
+
+        process.py_bdy[p*numnodesx+m] = GETVALUE(simdata->pold, m, n, p);
+      
+        SETVALUE(simdata->pnew, m, n, p,
+                 GETVALUE(simdata->pold, m, n, p) - rhoc2dtdx * (dvx + dvy + dvz));
+    }
+  }
+  MPI_Isend(process.py_bdy[0], numnodesx*numnodesz, MPI_DOUBLE, process.neighbors[DOWN], 1, process->world->cart_comm, &requesty);
+  int p = numnodesz - 1;
+  for (int n = 0; n < numnodesy; n++) {
+    for (int m = 0; m < numnodesx; m++) {
+        double rhoc2dtdx = GETVALUE(simdata->rho, m, n, p) *
+                           GETVALUE(simdata->c, m, n, p) *
+                           GETVALUE(simdata->c, m, n, p) * dtdx;
+        double dvx = GETVALUE(simdata->vxold, m, n, p);
+        double dvy = GETVALUE(simdata->vyold, m, n, p);
+        double dvz = GETVALUE(simdata->vzold, m, n, p);
+
+        dvx -= m > 0 ? GETVALUE(simdata->vxold, m - 1, n, p) : 0.0;
+        dvy -= n > 0 ? GETVALUE(simdata->vyold, m, n - 1, p) : 0.0;
+        dvz -= p > 0 ? GETVALUE(simdata->vzold, m, n, p - 1) : 0.0;
+
+        process.pz_bdy[n*numnodesx+m] = GETVALUE(simdata->pold, m, n, p);
+      
+        SETVALUE(simdata->pnew, m, n, p,
+                 GETVALUE(simdata->pold, m, n, p) - rhoc2dtdx * (dvx + dvy + dvz));
+    }
+  }
+  MPI_Isend(process.pz_bdy[0], numnodesy*numnodesx, MPI_DOUBLE, process.neighbors[BACKWARD], 2, process->world->cart_comm, &requestz);
+
+  for (int p = 1; p < numnodesz - 1; p++) {
+    for (int n = 1; n < numnodesy - 1; n++) {
+      for (int m = 1; m < numnodesx - 1; m++) {
         double c = GETVALUE(simdata->c, m, n, p);
         double rho = GETVALUE(simdata->rho, m, n, p);
 
@@ -1145,6 +1224,41 @@ void update_pressure(simulation_data_t *simdata) {
       }
     }
   }
+  MPI_Recv(process.vx_bdy, numnodesy*numnodesz, MPI_DOUBLE, process.neighbors[LEFT], 3, process->world->cart_comm, MPI_STATUS_IGNORE);
+  MPI_Recv(process.vy_bdy, numnodesx*numnodesz, MPI_DOUBLE, process.neighbors[DOWN], 4, process->world->cart_comm, MPI_STATUS_IGNORE);
+  MPI_Recv(process.vz_bdy, numnodesx*numnodesy, MPI_DOUBLE, process.neighbors[BACKWARD], 5, process->world->cart_comm, MPI_STATUS_IGNORE);
+
+  
+  for (int p = 0; p < numnodesz; p++) {
+    for (int n = 0; n < numnodesy; n++) {
+      for (int m = 0; p < numnodesx; m++){
+          double rhoc2dtdx = GETVALUE(simdata->rho, m, n, p) *
+                            GETVALUE(simdata->c, m, n, p) *
+                            GETVALUE(simdata->c, m, n, p) * dtdx;
+          double dvx = GETVALUE(simdata->vxold, 0, n, p);
+          double dvy = GETVALUE(simdata->vyold, m, 0, p);
+          double dvz = GETVALUE(simdata->vzold, m, n, 0);
+
+          dvx -= process.vx_bdy[p*numnodesy+n];
+          dvy -= process.vy_bdy[p*numnodesx+m];
+          dvz -= process.vz_bdy[n*numnodesx+m];
+
+          if(m == 0){
+            SETVALUE(simdata->pnew, 0, n, p,
+                    GETVALUE(simdata->pold, 0, n, p) - rhoc2dtdx * (dvx + dvy + dvz));
+          }
+          if(n == 0){
+            SETVALUE(simdata->pnew, m, 0, p,
+                    GETVALUE(simdata->pold, m, 0, p) - rhoc2dtdx * (dvx + dvy + dvz));
+          }
+          if(p == 0){
+            SETVALUE(simdata->pnew, m, n, 0,
+                    GETVALUE(simdata->pold, m, n, 0) - rhoc2dtdx * (dvx + dvy + dvz));
+          }
+      }
+    }
+  }
+  
 }
 
 void update_velocities(simulation_data_t *simdata) {
@@ -1166,10 +1280,102 @@ void update_velocities(simulation_data_t *simdata) {
 
   We gain a factor of about 5 time faster !!
   */
+  MPI_Request requestx;
+  MPI_Request requesty;
+  MPI_Request requestz;
 
+  
+  MPI_Recv(process.px_bdy[1], numnodesy*numnodesz, MPI_DOUBLE, process.neighbors[RIGHT], 0, process->world->cart_comm, MPI_STATUS_IGNORE);
+  MPI_Recv(process.py_bdy[1], numnodesx*numnodesz, MPI_DOUBLE, process.neighbors[UP], 1, process->world->cart_comm, MPI_STATUS_IGNORE);
+  MPI_Recv(process.pz_bdy[1], numnodesy*numnodesx, MPI_DOUBLE, process.neighbors[FORWARD], 2, process->world->cart_comm, MPI_STATUS_IGNORE);
+
+  int m = numnodesx - 1;
   for (int p = 0; p < numnodesz; p++) {
     for (int n = 0; n < numnodesy; n++) {
-      for (int m = 0; m < numnodesx; m++) {
+        int mp1 = MIN(numnodesx - 1, m + 1);
+        int np1 = MIN(numnodesy - 1, n + 1);
+        int pp1 = MIN(numnodesz - 1, p + 1);
+
+        double dtdxrho = dtdx / GETVALUE(simdata->rhohalf, m, n, p);
+
+        double p_mnq = px_bdy[1][p*numnodesy+n];
+
+        double dpx = GETVALUE(simdata->pnew, mp1, n, p) - p_mnq;
+        double dpy = GETVALUE(simdata->pnew, m, np1, p) - p_mnq;
+        double dpz = GETVALUE(simdata->pnew, m, n, pp1) - p_mnq;
+
+        double prev_vx = GETVALUE(simdata->vxold, m, n, p);
+        double prev_vy = GETVALUE(simdata->vyold, m, n, p);
+        double prev_vz = GETVALUE(simdata->vzold, m, n, p);
+
+        process.vx_bdy[p*numnodesy+n] = GETVALUE(simdata->vxold, m, n, p);
+
+        SETVALUE(simdata->vxnew, m, n, p, prev_vx - dtdxrho * dpx);
+        SETVALUE(simdata->vynew, m, n, p, prev_vy - dtdxrho * dpy);
+        SETVALUE(simdata->vznew, m, n, p, prev_vz - dtdxrho * dpz);
+    }
+  }
+  MPI_Isend(process.vx_bdy, numnodesy*numnodesz, MPI_DOUBLE, process.neighbors[RIGHT], 3, process->world->cart_comm, &requestx);
+
+  int n = numnodesy - 1;
+  for (int p = 0; p < numnodesz; p++) {
+    for (int m = 0; m < numnodesx; m++) {
+        int mp1 = MIN(numnodesx - 1, m + 1);
+        int np1 = MIN(numnodesy - 1, n + 1);
+        int pp1 = MIN(numnodesz - 1, p + 1);
+
+        double dtdxrho = dtdx / GETVALUE(simdata->rhohalf, m, n, p);
+
+        double p_mnq = py_bdy[1][p*numnodesx+m];
+
+        double dpx = GETVALUE(simdata->pnew, mp1, n, p) - p_mnq;
+        double dpy = GETVALUE(simdata->pnew, m, np1, p) - p_mnq;
+        double dpz = GETVALUE(simdata->pnew, m, n, pp1) - p_mnq;
+
+        double prev_vx = GETVALUE(simdata->vxold, m, n, p);
+        double prev_vy = GETVALUE(simdata->vyold, m, n, p);
+        double prev_vz = GETVALUE(simdata->vzold, m, n, p);
+
+        process.vy_bdy[p*numnodesx+m] = GETVALUE(simdata->vxold, m, n, p);
+
+        SETVALUE(simdata->vxnew, m, n, p, prev_vx - dtdxrho * dpx);
+        SETVALUE(simdata->vynew, m, n, p, prev_vy - dtdxrho * dpy);
+        SETVALUE(simdata->vznew, m, n, p, prev_vz - dtdxrho * dpz);
+    }
+  }
+  MPI_Isend(process.vy_bdy, numnodesx*numnodesz, MPI_DOUBLE, process.neighbors[UP], 4, process->world->cart_comm, &requesty);
+
+  int p = numnodesz - 1;
+  for (int n = 0; n < numnodesy; n++) {
+    for (int m = 0; m < numnodesz; m++) {
+        int mp1 = MIN(numnodesx - 1, m + 1);
+        int np1 = MIN(numnodesy - 1, n + 1);
+        int pp1 = MIN(numnodesz - 1, p + 1);
+
+        double dtdxrho = dtdx / GETVALUE(simdata->rhohalf, m, n, p);
+
+        double p_mnq = pz_bdy[1][n*numnodesx+m];
+
+        double dpx = GETVALUE(simdata->pnew, mp1, n, p) - p_mnq;
+        double dpy = GETVALUE(simdata->pnew, m, np1, p) - p_mnq;
+        double dpz = GETVALUE(simdata->pnew, m, n, pp1) - p_mnq;
+
+        double prev_vx = GETVALUE(simdata->vxold, m, n, p);
+        double prev_vy = GETVALUE(simdata->vyold, m, n, p);
+        double prev_vz = GETVALUE(simdata->vzold, m, n, p);
+
+        process.vz_bdy[n*numnodesx+m] = GETVALUE(simdata->vxold, m, n, p);
+
+        SETVALUE(simdata->vxnew, m, n, p, prev_vx - dtdxrho * dpx);
+        SETVALUE(simdata->vynew, m, n, p, prev_vy - dtdxrho * dpy);
+        SETVALUE(simdata->vznew, m, n, p, prev_vz - dtdxrho * dpz);
+    }
+  }
+  MPI_Isend(process.vz_bdy, numnodesy*numnodesx, MPI_DOUBLE, process.neighbors[FORWARD], 5, process->world->cart_comm, &requestz);
+
+  for (int p = 0; p < numnodesz - 1; p++) {
+    for (int n = 0; n < numnodesy - 1; n++) {
+      for (int m = 0; m < numnodesx - 1; m++) {
         int mp1 = MIN(numnodesx - 1, m + 1);
         int np1 = MIN(numnodesy - 1, n + 1);
         int pp1 = MIN(numnodesz - 1, p + 1);
@@ -1192,6 +1398,7 @@ void update_velocities(simulation_data_t *simdata) {
       }
     }
   }
+
 }
 
 void init_simulation(simulation_data_t *simdata, const char *params_filename, process_s *process) {
