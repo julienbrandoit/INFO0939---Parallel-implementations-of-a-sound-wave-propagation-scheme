@@ -487,7 +487,7 @@ void update_velocities(simulation_data_t *simdata);
  * used during the simulation
  * @param params_filename [IN] a path to a parameter file to read
  */
-void init_simulation(simulation_data_t *simdata, const char *params_filename);
+void init_simulation(simulation_data_t *simdata, const char *params_filename, process_s *my_process);
 
 /**
  * @brief Finalize the simulation by deallocating the data used for the
@@ -505,3 +505,44 @@ void finalize_simulation(simulation_data_t *simdata);
  */
 void swap_timesteps(simulation_data_t *simdata);
 
+
+/*
+Our structs
+*/
+typedef enum {
+  UP    = 0,
+  DOWN  = 1,
+  LEFT  = 2,
+  RIGHT = 3,
+  FORWARD = 4,
+  BACKWARD = 5
+} neighbor_s;
+
+typedef struct world {
+  int world_size;
+  MPI_Comm cart_comm;
+
+  int dims[3];
+  int periods[3];
+  int reorder;
+
+  grid_t world_grid;
+
+  data_t *p_out; 
+  data_t *vx_out;
+  data_t *vy_out;
+  data_t *vz_out;
+  
+} world_s;
+
+typedef struct process {
+  int world_rank;
+  int cart_rank;
+
+  world_s *world;
+
+  int coords[3];
+  int neighbors[6]; //see the neighbor_t struct for order
+} process_s;
+
+/* END OUR STRUCTS */
