@@ -66,7 +66,6 @@ void free_world(world_s *world)
 
 void init_process(process_s **process, world_s *world)
 {
-  int size_direction[3*3]; //{size m, start m, end m, size n, ... }
   *process = malloc(sizeof(process_s));
   if(!(*process))
   {
@@ -88,32 +87,6 @@ void init_process(process_s **process, world_s *world)
   MPI_Cart_shift(world->cart_comm, 2, 1, 
                   &((*process)->neighbors)[FORWARD], &((*process)->neighbors)[BACKWARD]);
   
-  //ICI CHARLOTTE
-  /*size_process((*process)->coords, world, size_direction);
-
-  (*process)->px_bdy = malloc(sizeof(double*)*2);
-  (*process)->py_bdy = malloc(sizeof(double*)*2);
-  (*process)->pz_bdy = malloc(sizeof(double*)*2);
-  if(!(*process)->px_bdy || !(*process)->py_bdy || !(*process)->pz_bdy)
-  {
-    fprintf(stderr, "Error: Memory allocation for process failed!\n");
-    MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
-  }
-  (*process)->px_bdy[0] = malloc(sizeof(double)*size_direction[3]*size_direction[6]);
-  (*process)->px_bdy[1] = malloc(sizeof(double)*size_direction[3]*size_direction[6]);
-  (*process)->py_bdy[0] = malloc(sizeof(double)*size_direction[0]*size_direction[6]);
-  (*process)->py_bdy[1] = malloc(sizeof(double)*size_direction[0]*size_direction[6]);
-  (*process)->pz_bdy[0] = malloc(sizeof(double)*size_direction[0]*size_direction[3]);
-  (*process)->pz_bdy[1] = malloc(sizeof(double)*size_direction[0]*size_direction[3]);
-  (*process)->vx_bdy = malloc(sizeof(double)*size_direction[3]*size_direction[6]);
-  (*process)->vy_bdy = malloc(sizeof(double)*size_direction[0]*size_direction[6]);
-  (*process)->vz_bdy = malloc(sizeof(double)*size_direction[0]*size_direction[3]);
-  if(!((*process)->px_bdy[0])||!((*process)->px_bdy[1])||!((*process)->py_bdy[0])||!((*process)->py_bdy[1])||!((*process)->pz_bdy[0])||!((*process)->pz_bdy[1])||!((*process)->vx_bdy)||!((*process)->vy_bdy)||!((*process)->vz_bdy))
-  {
-    fprintf(stderr, "Error: Memory allocation for process failed!\n");
-    MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
-  }*/
-
   printf("Process : world_rank = %d, cart_rank = %d, coords = (%d, %d, %d)\n", (*process)->world_rank,(*process)->cart_rank, (*process)->coords[0], (*process)->coords[1], (*process)->coords[2]); 
   fflush(stdout);
 } 
@@ -205,9 +178,13 @@ int main(int argc, char *argv[]) {
   process_s *my_process;
   init_process(&my_process, my_world);
   MPI_Barrier(my_world->cart_comm);
-  //
+
   simulation_data_t simdata;
   init_simulation(&simdata, argv[1], my_process);
+
+  MPI_Barrier(my_world->cart_comm);
+  fflush(stdout);
+  MPI_Barrier(my_world->cart_comm);
 
   printf("Process %d : init ok, starting computation ...\n", my_process->world_rank);
   fflush(stdout);
@@ -1485,8 +1462,6 @@ void init_simulation(simulation_data_t *simdata, const char *params_filename, pr
     exit(1);
   }
 
-  if(process->world_rank == 0)
-  {
     world_grid.xmin = rhoin_grid.xmin;
     world_grid.xmax = rhoin_grid.xmax;
     world_grid.ymin = rhoin_grid.ymin;
@@ -1501,6 +1476,10 @@ void init_simulation(simulation_data_t *simdata, const char *params_filename, pr
     world_grid.numnodesz =
         MAX(floor((world_grid.zmax - world_grid.zmin) / simdata->params.dx), 1);
   
+  process->world->world_grid = world_grid;
+
+  if(process->world_rank == 0)
+  {
     if (simdata->params.outrate > 0 && simdata->params.outputs != NULL) {
       for (int i = 0; i < simdata->params.numoutputs; i++) {
         char *outfilei = simdata->params.outputs[i].filename;
@@ -1526,8 +1505,6 @@ void init_simulation(simulation_data_t *simdata, const char *params_filename, pr
       }
     }
 
-    process->world->world_grid = world_grid;
-
     if ((process->world->p_out = allocate_data(&world_grid)) == NULL ||
       (process->world->vx_out = allocate_data(&world_grid)) == NULL ||
       (process->world->vy_out = allocate_data(&world_grid)) == NULL ||
@@ -1549,7 +1526,8 @@ void init_simulation(simulation_data_t *simdata, const char *params_filename, pr
       (simdata->vyold = allocate_data(&sim_grid)) == NULL ||
       (simdata->vynew = allocate_data(&sim_grid)) == NULL ||
       (simdata->vzold = allocate_data(&sim_grid)) == NULL ||
-      (simdata->vznew = allocate_data(&sim_grid)) == NULL) {
+      (simdata->vznew = allocate_data(&sim_grid)) == NULL)
+  {
     printf("Failed to allocate memory. Aborting...\n\n");
     exit(1);
   }
@@ -1563,6 +1541,32 @@ void init_simulation(simulation_data_t *simdata, const char *params_filename, pr
   fill_data(simdata->vyold, 0.0);
   fill_data(simdata->vznew, 0.0);
   fill_data(simdata->vzold, 0.0);
+
+  int size_direction[3*3]; //{size m, start m, end m, size n, ... }
+  size_process(process->coords, process->world, size_direction);
+
+  process->px_bdy = malloc(sizeof(double*)*2);
+  process->py_bdy = malloc(sizeof(double*)*2);
+  process->pz_bdy = malloc(sizeof(double*)*2);
+  if(!process->px_bdy || !process->py_bdy || !process->pz_bdy)
+  {
+    fprintf(stderr, "Error: Memory allocation for process failed!\n");
+    MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+  }
+  process->px_bdy[0] = malloc(sizeof(double)*size_direction[3]*size_direction[6]);
+  process->px_bdy[1] = malloc(sizeof(double)*size_direction[3]*size_direction[6]);
+  process->py_bdy[0] = malloc(sizeof(double)*size_direction[0]*size_direction[6]);
+  process->py_bdy[1] = malloc(sizeof(double)*size_direction[0]*size_direction[6]);
+  process->pz_bdy[0] = malloc(sizeof(double)*size_direction[0]*size_direction[3]);
+  process->pz_bdy[1] = malloc(sizeof(double)*size_direction[0]*size_direction[3]);
+  process->vx_bdy = malloc(sizeof(double)*size_direction[3]*size_direction[6]);
+  process->vy_bdy = malloc(sizeof(double)*size_direction[0]*size_direction[6]);
+  process->vz_bdy = malloc(sizeof(double)*size_direction[0]*size_direction[3]);
+  if(!(process->px_bdy[0])||!(process->px_bdy[1])||!(process->py_bdy[0])||!(process->py_bdy[1])||!(process->pz_bdy[0])||!(process->pz_bdy[1])||!(process->vx_bdy)||!(process->vy_bdy)||!(process->vz_bdy))
+  {
+    fprintf(stderr, "Error: Memory allocation for process failed!\n");
+    MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+  }
 
   if(process->world_rank == 0)
   {
