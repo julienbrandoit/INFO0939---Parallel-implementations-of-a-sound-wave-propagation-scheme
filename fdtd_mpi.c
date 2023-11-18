@@ -163,7 +163,7 @@ void sort_subgrid_to_grid(double *sub_table, int* counts, double *total_table, w
   }
 }
 
-int main(int argc, const char *argv[]) {
+int main(int argc, char *argv[]) {
 
   /*INIT MPI*/
   MPI_Init(&argc, &argv);
@@ -217,7 +217,7 @@ int main(int argc, const char *argv[]) {
           int rank_size[9];
           int rank_coords[3];
           MPI_Cart_coords((&my_world)->cart_comm, rank, 3, rank_coords);
-          process_size(rank_coords, &my_world, rank_size);
+          size_process(rank_coords, &my_world, rank_size);
           displs[rank] = rank == 0 ? 0 : displs[rank-1] + counts [rank-1];
           counts[rank] = rank_size[0] * rank_size[3] * rank_size[6];
         }
@@ -1165,7 +1165,7 @@ void update_pressure(simulation_data_t *simdata, process_s *process) {
         dvy -= n > 0 ? GETVALUE(simdata->vyold, m, n - 1, p) : 0.0;
         dvz -= p > 0 ? GETVALUE(simdata->vzold, m, n, p - 1) : 0.0;
 
-        process->py_bdy[p*numnodesx+m] = GETVALUE(simdata->pold, m, n, p);
+        process->py_bdy[0][p*numnodesx+m] = GETVALUE(simdata->pold, m, n, p);
       
         SETVALUE(simdata->pnew, m, n, p,
                  GETVALUE(simdata->pold, m, n, p) - rhoc2dtdx * (dvx + dvy + dvz));
@@ -1186,7 +1186,7 @@ void update_pressure(simulation_data_t *simdata, process_s *process) {
         dvy -= n > 0 ? GETVALUE(simdata->vyold, m, n - 1, p) : 0.0;
         dvz -= p > 0 ? GETVALUE(simdata->vzold, m, n, p - 1) : 0.0;
 
-        process->pz_bdy[n*numnodesx+m] = GETVALUE(simdata->pold, m, n, p);
+        process->pz_bdy[0][n*numnodesx+m] = GETVALUE(simdata->pold, m, n, p);
       
         SETVALUE(simdata->pnew, m, n, p,
                  GETVALUE(simdata->pold, m, n, p) - rhoc2dtdx * (dvx + dvy + dvz));
