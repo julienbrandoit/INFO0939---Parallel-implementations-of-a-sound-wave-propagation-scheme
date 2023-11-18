@@ -216,7 +216,7 @@ int main(int argc, const char *argv[]) {
         for (int rank = 0; rank < (&my_world)->world_size; rank++) {
           int rank_size[9];
           int rank_coords[3];
-          MPI_Cart_coords(world->cart_comm, rank, 3, rank_coords);
+          MPI_Cart_coords((&my_world)->cart_comm, rank, 3, rank_coords);
           process_size(rank_coords, &my_world, rank_size);
           displs[rank] = rank == 0 ? 0 : displs[rank-1] + counts [rank-1];
           counts[rank] = rank_size[0] * rank_size[3] * rank_size[6];
