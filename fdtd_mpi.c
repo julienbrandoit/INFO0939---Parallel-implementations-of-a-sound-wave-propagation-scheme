@@ -6,41 +6,48 @@
 #include "fdtd_mpi.h"
 #include <mpi.h>
 
-void init_world(world_s *world, int dims[3], int periods[3], int reorder)
+void init_world(world_s **world, int dims[3], int periods[3], int reorder)
 {
-  world = malloc(sizeof(world_s));
-  if(!world)
+  *world = malloc(sizeof(world_s));
+  if(!(*world))
   {
     fprintf(stderr, "Error: Memory allocation for world failed \n");
     MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE); // Arrête tous les processus MPI.
   }
 
-  (world->dims)[0] = dims[0];
-  (world->dims)[1] = dims[1];
-  (world->dims)[2] = dims[2];
+  ((*world)->dims)[0] = dims[0];
+  ((*world)->dims)[1] = dims[1];
+  ((*world)->dims)[2] = dims[2];
   
-  (world->periods)[0] = periods[0];
-  (world->periods)[1] = periods[1];
-  (world->periods)[2] = periods[2];
+  ((*world)->periods)[0] = periods[0];
+  ((*world)->periods)[1] = periods[1];
+  ((*world)->periods)[2] = periods[2];
 
-  world->reorder = reorder;
+  (*world)->reorder = reorder;
 
-  MPI_Comm_size(MPI_COMM_WORLD, &(world->world_size));
+  MPI_Comm_size(MPI_COMM_WORLD, &((*world)->world_size));
+  
+  MPI_Dims_create((*world)->world_size, 3, dims);
+  MPI_Cart_create(MPI_COMM_WORLD, 3, dims, periods, reorder, &((*world)->cart_comm));
 
-  MPI_Dims_create(world->world_size, 3, dims);
-  MPI_Cart_create(MPI_COMM_WORLD, 3, dims, periods, reorder, &(world->cart_comm));
+  int rank;
+  MPI_Comm_rank( (*world)->cart_comm , &rank);
 
-  printf("\n");
-  printf("== WORLD CREATION (mpi implementation) == \n");
-  printf("  (P_x, P_y, P_z) = (%d, %d, %d)\n", dims[0], dims[1], dims[2]);
-  printf("  World size : %d\n", world->world_size);
-  printf("== PROCESSES CREATION (mpi implementation) == \n");
+  if(rank == 0)
+  {
+    printf("\n");
+    printf("== WORLD CREATION (mpi implementation) ==\n");
+    printf("  (P_x, P_y, P_z) = (%d, %d, %d)\n", dims[0], dims[1], dims[2]);
+    printf("  World size : %d\n", (*world)->world_size);
+    printf("== PROCESSES CREATION (mpi implementation) == \n");
+    fflush(stdout);
+  }
 
 } 
 
 void free_world(world_s *world)
 {
-  //MPI_Comm_free(&(world->cart_comm));
+  MPI_Comm_free(&(world->cart_comm));
 
   free(world->p_out->vals);
   free(world->p_out);
@@ -57,55 +64,58 @@ void free_world(world_s *world)
   free(world);
 }
 
-void init_process(process_s *process, world_s *world)// on utilise pas simdata ?
+void init_process(process_s **process, world_s *world)
 {
   int size_direction[3*3]; //{size m, start m, end m, size n, ... }
-  process = malloc(sizeof(process_s));
-  if(!process)
+  *process = malloc(sizeof(process_s));
+  if(!(*process))
   {
     fprintf(stderr, "Error: Memory allocation for process failed!\n");
     MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
   }
 
-  process->world = world;
+  (*process)->world = world;
 
-  MPI_Comm_rank(MPI_COMM_WORLD , &(process->world_rank));
-  MPI_Comm_rank(world->cart_comm, &(process->cart_rank));
+  MPI_Comm_rank(MPI_COMM_WORLD , &((*process)->world_rank));
+  MPI_Comm_rank(world->cart_comm, &((*process)->cart_rank));
 
-  MPI_Cart_coords(world->cart_comm, process->cart_rank, 3, process->coords);
+  MPI_Cart_coords(world->cart_comm, (*process)->cart_rank, 3, (*process)->coords);
 
   MPI_Cart_shift(world->cart_comm, 0, 1, 
-                  &(process->neighbors)[UP], &(process->neighbors)[DOWN]);
+                  &((*process)->neighbors)[UP], &((*process)->neighbors)[DOWN]);
   MPI_Cart_shift(world->cart_comm, 1, 1, 
-                  &(process->neighbors)[LEFT], &(process->neighbors)[RIGHT]);
+                  &((*process)->neighbors)[LEFT], &((*process)->neighbors)[RIGHT]);
   MPI_Cart_shift(world->cart_comm, 2, 1, 
-                  &(process->neighbors)[FORWARD], &(process->neighbors)[BACKWARD]);
+                  &((*process)->neighbors)[FORWARD], &((*process)->neighbors)[BACKWARD]);
+  
+  //ICI CHARLOTTE
+  /*size_process((*process)->coords, world, size_direction);
 
-  size_process(process->coords, world, size_direction);
-  process->px_bdy = malloc(sizeof(double*)*2);
-  process->py_bdy = malloc(sizeof(double*)*2);
-  process->pz_bdy = malloc(sizeof(double*)*2);
-  if(!process->px_bdy || !process->py_bdy || !process->pz_bdy)
+  (*process)->px_bdy = malloc(sizeof(double*)*2);
+  (*process)->py_bdy = malloc(sizeof(double*)*2);
+  (*process)->pz_bdy = malloc(sizeof(double*)*2);
+  if(!(*process)->px_bdy || !(*process)->py_bdy || !(*process)->pz_bdy)
   {
     fprintf(stderr, "Error: Memory allocation for process failed!\n");
     MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
   }
-  process->px_bdy[0] = malloc(sizeof(double)*size_direction[3]*size_direction[6]);
-  process->px_bdy[1] = malloc(sizeof(double)*size_direction[3]*size_direction[6]);
-  process->py_bdy[0] = malloc(sizeof(double)*size_direction[0]*size_direction[6]);
-  process->py_bdy[1] = malloc(sizeof(double)*size_direction[0]*size_direction[6]);
-  process->pz_bdy[0] = malloc(sizeof(double)*size_direction[0]*size_direction[3]);
-  process->pz_bdy[1] = malloc(sizeof(double)*size_direction[0]*size_direction[3]);
-  process->vx_bdy = malloc(sizeof(double)*size_direction[3]*size_direction[6]);
-  process->vy_bdy = malloc(sizeof(double)*size_direction[0]*size_direction[6]);
-  process->vz_bdy = malloc(sizeof(double)*size_direction[0]*size_direction[3]);
-  if(!(process->px_bdy[0])||!(process->px_bdy[1])||!(process->py_bdy[0])||!(process->py_bdy[1])||!(process->pz_bdy[0])||!(process->pz_bdy[1])||!(process->vx_bdy)||!(process->vy_bdy)||!(process->vz_bdy))
+  (*process)->px_bdy[0] = malloc(sizeof(double)*size_direction[3]*size_direction[6]);
+  (*process)->px_bdy[1] = malloc(sizeof(double)*size_direction[3]*size_direction[6]);
+  (*process)->py_bdy[0] = malloc(sizeof(double)*size_direction[0]*size_direction[6]);
+  (*process)->py_bdy[1] = malloc(sizeof(double)*size_direction[0]*size_direction[6]);
+  (*process)->pz_bdy[0] = malloc(sizeof(double)*size_direction[0]*size_direction[3]);
+  (*process)->pz_bdy[1] = malloc(sizeof(double)*size_direction[0]*size_direction[3]);
+  (*process)->vx_bdy = malloc(sizeof(double)*size_direction[3]*size_direction[6]);
+  (*process)->vy_bdy = malloc(sizeof(double)*size_direction[0]*size_direction[6]);
+  (*process)->vz_bdy = malloc(sizeof(double)*size_direction[0]*size_direction[3]);
+  if(!((*process)->px_bdy[0])||!((*process)->px_bdy[1])||!((*process)->py_bdy[0])||!((*process)->py_bdy[1])||!((*process)->pz_bdy[0])||!((*process)->pz_bdy[1])||!((*process)->vx_bdy)||!((*process)->vy_bdy)||!((*process)->vz_bdy))
   {
     fprintf(stderr, "Error: Memory allocation for process failed!\n");
     MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
-  }
+  }*/
 
-  printf("Process : rank = %d, coords = (%d, %d, %d)\n", process->world_rank, process->coords[0], process->coords[1], process->coords[2]); 
+  printf("Process : world_rank = %d, cart_rank = %d, coords = (%d, %d, %d)\n", (*process)->world_rank,(*process)->cart_rank, (*process)->coords[0], (*process)->coords[1], (*process)->coords[2]); 
+  fflush(stdout);
 } 
 
 void free_process(process_s *process)
@@ -135,6 +145,14 @@ void size_process(int coord[3], world_s *world, int table[3*3])
   table[2] = end_m;
   table[1] = start_m;
   table[0] = end_m - start_m;
+
+
+  for(int i = 0; i < 9; i++)
+  {
+    printf("%d : %d, (%d, %d, %d)\n", i, table[i], coord[0], coord[1], coord[2]);
+    fflush(stdout);
+  }
+
 }
 
 void sort_subgrid_to_grid(double *sub_table, int* counts, double *total_table, world_s *world)
@@ -177,21 +195,22 @@ int main(int argc, char *argv[]) {
   int P_x = atoi(argv[2]); 
   int P_y = atoi(argv[3]);
   int P_z = atoi(argv[4]);
-  
+
   int dims[3] = {P_x, P_y, P_z};
   int periods[3] = {0,0,0};
   int reorder = 0;
 
-  world_s my_world;
+  world_s *my_world;
   init_world(&my_world, dims, periods, reorder);
-
-  process_s my_process;
-  init_process(&my_process, &my_world);
-  
+  process_s *my_process;
+  init_process(&my_process, my_world);
+  MPI_Barrier(my_world->cart_comm);
+  //
   simulation_data_t simdata;
-  init_simulation(&simdata, argv[1], &my_process);
+  init_simulation(&simdata, argv[1], my_process);
 
-  printf("Process %d : init ok, starting computation ...\n", (&my_process)->world_rank);
+  printf("Process %d : init ok, starting computation ...\n", my_process->world_rank);
+  fflush(stdout);
 
   int numtimesteps = floor(simdata.params.maxt / simdata.params.dt);
 
@@ -205,19 +224,19 @@ int main(int argc, char *argv[]) {
       int*    displs = NULL;
       
       int my_size[9];
-      size_process((&my_process)->coords, &my_world, my_size);
+      size_process(my_process->coords, my_world, my_size);
 
-      if ((&my_process)->world_rank == 0) {
-        int size = (&my_world)->world_grid.numnodesx * (&my_world)->world_grid.numnodesy * (&my_world)->world_grid.numnodesz;
+      if (my_process->world_rank == 0) {
+        int size = my_world->world_grid.numnodesx * my_world->world_grid.numnodesy * my_world->world_grid.numnodesz;
         tmpbuf = (double*)malloc(sizeof(double)*size); 
-        counts = (int*)malloc(sizeof(int)*(&my_world)->world_size);
-        displs = (int*)malloc(sizeof(int)*(&my_world)->world_size);
+        counts = (int*)malloc(sizeof(int)*my_world->world_size);
+        displs = (int*)malloc(sizeof(int)*my_world->world_size);
 
-        for (int rank = 0; rank < (&my_world)->world_size; rank++) {
+        for (int rank = 0; rank < my_world->world_size; rank++) {
           int rank_size[9];
           int rank_coords[3];
-          MPI_Cart_coords((&my_world)->cart_comm, rank, 3, rank_coords);
-          size_process(rank_coords, &my_world, rank_size);
+          MPI_Cart_coords(my_world->cart_comm, rank, 3, rank_coords);
+          size_process(rank_coords, my_world, rank_size);
           displs[rank] = rank == 0 ? 0 : displs[rank-1] + counts [rank-1];
           counts[rank] = rank_size[0] * rank_size[3] * rank_size[6];
         }
@@ -227,34 +246,34 @@ int main(int argc, char *argv[]) {
         data_t *output_data = NULL;
         switch (simdata.params.outputs[i].source) {
         case PRESSURE:
-          MPI_Gatherv(simdata.pold->vals, my_size[0] * my_size[3] * my_size[6], MPI_DOUBLE, tmpbuf, counts, displs, MPI_DOUBLE, 0, (&my_world)->cart_comm);
-          sort_subgrid_to_grid(tmpbuf, counts, my_world.p_out->vals, &my_world);
-          output_data = my_world.p_out;
+          MPI_Gatherv(simdata.pold->vals, my_size[0] * my_size[3] * my_size[6], MPI_DOUBLE, tmpbuf, counts, displs, MPI_DOUBLE, 0, my_world->cart_comm);
+          sort_subgrid_to_grid(tmpbuf, counts, my_world->p_out->vals, my_world);
+          output_data = my_world->p_out;
 
           break;
         case VELOCITYX:
-          MPI_Gatherv(simdata.vxold->vals, my_size[0] * my_size[3] * my_size[6], MPI_DOUBLE, tmpbuf, counts, displs, MPI_DOUBLE, 0, (&my_world)->cart_comm);
-          sort_subgrid_to_grid(tmpbuf, counts, my_world.vx_out->vals, &my_world);
-          output_data = my_world.vx_out;
+          MPI_Gatherv(simdata.vxold->vals, my_size[0] * my_size[3] * my_size[6], MPI_DOUBLE, tmpbuf, counts, displs, MPI_DOUBLE, 0, my_world->cart_comm);
+          sort_subgrid_to_grid(tmpbuf, counts, my_world->vx_out->vals, my_world);
+          output_data = my_world->vx_out;
 
           break;
         case VELOCITYY:
-          MPI_Gatherv(simdata.vyold->vals, my_size[0] * my_size[3] * my_size[6], MPI_DOUBLE, tmpbuf, counts, displs, MPI_DOUBLE, 0, (&my_world)->cart_comm);
-          sort_subgrid_to_grid(tmpbuf, counts, my_world.vy_out->vals, &my_world);
-          output_data = my_world.vy_out;
+          MPI_Gatherv(simdata.vyold->vals, my_size[0] * my_size[3] * my_size[6], MPI_DOUBLE, tmpbuf, counts, displs, MPI_DOUBLE, 0, my_world->cart_comm);
+          sort_subgrid_to_grid(tmpbuf, counts, my_world->vy_out->vals, my_world);
+          output_data = my_world->vy_out;
           
           break;
         case VELOCITYZ:
-          MPI_Gatherv(simdata.vzold->vals, my_size[0] * my_size[3] * my_size[6], MPI_DOUBLE, tmpbuf, counts, displs, MPI_DOUBLE, 0, (&my_world)->cart_comm);
-          sort_subgrid_to_grid(tmpbuf, counts, my_world.vz_out->vals, &my_world);
-          output_data = my_world.vz_out;
+          MPI_Gatherv(simdata.vzold->vals, my_size[0] * my_size[3] * my_size[6], MPI_DOUBLE, tmpbuf, counts, displs, MPI_DOUBLE, 0, my_world->cart_comm);
+          sort_subgrid_to_grid(tmpbuf, counts, my_world->vz_out->vals, my_world);
+          output_data = my_world->vz_out;
 
           break;
         default:
           break;
         }
         
-        if((&my_process)->world_rank == 0)
+        if(my_process->world_rank == 0)
         {
           double time = tstep * simdata.params.dt;
           write_output(&simdata.params.outputs[i], output_data, tstep, time);
@@ -262,7 +281,7 @@ int main(int argc, char *argv[]) {
       }
     }
 
-    if ((&my_process)->world_rank == 0) {
+    if (my_process->world_rank == 0) {
       if (tstep > 0 && tstep % (numtimesteps / 10) == 0) {
         printf("step %8d/%d", tstep, numtimesteps);
 
@@ -289,12 +308,12 @@ int main(int argc, char *argv[]) {
 
     /*SWAP*/
 
-    update_pressure(&simdata, &my_process);
-    update_velocities(&simdata, &my_process);
+    update_pressure(&simdata, my_process);
+    update_velocities(&simdata, my_process);
     swap_timesteps(&simdata);
   }
 
-  printf("Process %d : end ok, will be free ...\n", (&my_process)->world_rank);
+  printf("Process %d : end ok, will be free ...\n", my_process->world_rank);
 
 
   double elapsed = GET_TIME() - start;
@@ -307,8 +326,8 @@ int main(int argc, char *argv[]) {
 
   finalize_simulation(&simdata);
 
-  free_process(&my_process);
-  free_world(&my_world);
+  free_process(my_process);
+  free_world(my_world);
 
   MPI_Finalize();
 
