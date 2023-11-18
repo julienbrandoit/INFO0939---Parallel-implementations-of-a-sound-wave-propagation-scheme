@@ -67,55 +67,12 @@
 #define GET_TIME() ((double)clock() / CLOCKS_PER_SEC) 
 
 #endif
+#ifndef _OPENMPI
+#define _OPENMPI
 
-"""
-Our structs
-"""
-typedef enum neighbor {
-  UP    = 0,
-  DOWN  = 1,
-  LEFT  = 2,
-  RIGHT = 3,
-  FORWARD = 4,
-  BACKWARD = 5
-} neighbor_s;
+#include <mpi.h>
+#endif
 
-typedef struct world {
-  int world_size;
-  MPI_Comm cart_comm;
-
-  int dims[3];
-  int periods[3];
-  int reorder;
-
-  grid_t world_grid;
-
-  data_t *p_out; 
-  data_t *vx_out;
-  data_t *vy_out;
-  data_t *vz_out;
-  
-} world_s;
-
-typedef struct process {
-  int world_rank;
-  int cart_rank;
-
-  double **px_bdy;
-  double **py_bdy;
-  double **pz_bdy;
-
-  double *vx_bdy;
-  double *vy_bdy;
-  double *vz_bdy;
-
-  world_s *world;
-
-  int coords[3];
-  int neighbors[6]; //see the neighbor_t struct for order
-} process_s;
-
-""" END OUR STRUCTS """
 typedef enum source_type {
   SINE = 0,
   AUDIO,
@@ -243,6 +200,57 @@ const char *output_source_keywords[] = {[PRESSURE] = "pressure",
                                         [VELOCITYX] = "velocity_x",
                                         [VELOCITYY] = "velocity_y",
                                         [VELOCITYZ] = "velocity_z"};
+
+
+
+/*OUR STRUCT*/
+typedef enum {
+  UP    = 0,
+  DOWN  = 1,
+  LEFT  = 2,
+  RIGHT = 3,
+  FORWARD = 4,
+  BACKWARD = 5
+} neighbor_s;
+
+typedef struct world {
+  int world_size;
+  MPI_Comm cart_comm;
+
+  int dims[3];
+  int periods[3];
+  int reorder;
+
+  grid_t world_grid;
+
+  data_t *p_out; 
+  data_t *vx_out;
+  data_t *vy_out;
+  data_t *vz_out;
+  
+} world_s;
+
+typedef struct process {
+  int world_rank;
+  int cart_rank;
+
+  double **px_bdy;
+  double **py_bdy;
+  double **pz_bdy;
+
+  double *vx_bdy;
+  double *vy_bdy;
+  double *vz_bdy;
+
+  world_s *world;
+
+  int coords[3];
+  int neighbors[6]; //see the neighbor_t struct for order
+} process_s;
+
+void size_process(int coord[3], world_s *world, int table[3*3]);
+
+/* END OUR STRUCTS */
 
 /******************************************************************************
  * Utilities functions                                                        *
@@ -473,7 +481,7 @@ int interpolate_inputmaps(simulation_data_t *simdata, grid_t *simgrid,
  * @param simdata [INOUT] a simulation data object used to get the input and
  * store result of the update step
  */
-void update_pressure(simulation_data_t *simdata);
+void update_pressure(simulation_data_t *simdata, process_s *process);
 
 /**
  * @brief Perform the velocities update step
@@ -481,7 +489,7 @@ void update_pressure(simulation_data_t *simdata);
  * @param simdata [INOUT] a simulation data object used to get the input and
  * store result of the update step
  */
-void update_velocities(simulation_data_t *simdata);
+void update_velocities(simulation_data_t *simdata, process_s *process);
 
 /**
  * @brief Initialize the simulation
@@ -507,45 +515,3 @@ void finalize_simulation(simulation_data_t *simdata);
  * @param simdata [INOUT] a simulation data object describing the simulation
  */
 void swap_timesteps(simulation_data_t *simdata);
-
-
-/*
-Our structs
-*/
-typedef enum {
-  UP    = 0,
-  DOWN  = 1,
-  LEFT  = 2,
-  RIGHT = 3,
-  FORWARD = 4,
-  BACKWARD = 5
-} neighbor_s;
-
-typedef struct world {
-  int world_size;
-  MPI_Comm cart_comm;
-
-  int dims[3];
-  int periods[3];
-  int reorder;
-
-  grid_t world_grid;
-
-  data_t *p_out; 
-  data_t *vx_out;
-  data_t *vy_out;
-  data_t *vz_out;
-  
-} world_s;
-
-typedef struct process {
-  int world_rank;
-  int cart_rank;
-
-  world_s *world;
-
-  int coords[3];
-  int neighbors[6]; //see the neighbor_t struct for order
-} process_s;
-
-/* END OUR STRUCTS */
