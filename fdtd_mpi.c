@@ -103,28 +103,21 @@ void size_process(int coord[3], world_s *world, int table[3*3])
   
   table[8] = end_p;
   table[7] = start_p;
-  table[6] = end_p - start_p;
+  table[6] = end_p - start_p + 1;
 
   int start_n = world->world_grid.numnodesy*coord[1]/world->dims[1];
   int end_n = world->world_grid.numnodesy*(coord[1]+1)/world->dims[1] - 1;
 
   table[5] = end_n;
   table[4] = start_n;
-  table[3] = end_n - start_n;
+  table[3] = end_n - start_n + 1;
 
   int start_m = world->world_grid.numnodesx*coord[0]/world->dims[0];
   int end_m = world->world_grid.numnodesx*(coord[0]+1)/world->dims[0] - 1;
 
   table[2] = end_m;
   table[1] = start_m;
-  table[0] = end_m - start_m;
-
-
-  for(int i = 0; i < 9; i++)
-  {
-    printf("%d : %d, (%d, %d, %d)\n", i, table[i], coord[0], coord[1], coord[2]);
-    fflush(stdout);
-  }
+  table[0] = end_m - start_m + 1;
 
 }
 
@@ -1438,16 +1431,31 @@ void init_simulation(simulation_data_t *simdata, const char *params_filename, pr
   fclose(rhofp);
   fclose(cfp);
 
-  int x_size = (rhoin_grid.xmax - rhoin_grid.xmin)/(process->world->dims)[0];
-  int y_size = (rhoin_grid.ymax - rhoin_grid.ymin)/(process->world->dims)[1];
-  int z_size = (rhoin_grid.zmax - rhoin_grid.zmin)/(process->world->dims)[2];
+  world_grid.xmin = rhoin_grid.xmin;
+  world_grid.xmax = rhoin_grid.xmax;
+  world_grid.ymin = rhoin_grid.ymin;
+  world_grid.ymax = rhoin_grid.ymax;
+  world_grid.zmin = rhoin_grid.zmin;
+  world_grid.zmax = rhoin_grid.zmax;
 
-  sim_grid.xmin = rhoin_grid.xmin + x_size*(process->coords)[0];
-  sim_grid.xmax = rhoin_grid.xmin + x_size*(process->coords)[0] + x_size;
-  sim_grid.ymin = rhoin_grid.ymin + y_size*(process->coords)[1];
-  sim_grid.ymax = rhoin_grid.ymin + y_size*(process->coords)[1] + y_size;
-  sim_grid.zmin = rhoin_grid.zmin + z_size*(process->coords)[2];
-  sim_grid.zmax = rhoin_grid.zmin + z_size*(process->coords)[2] + z_size;
+  world_grid.numnodesx =
+    MAX(floor((world_grid.xmax - world_grid.xmin) / simdata->params.dx), 1);
+  world_grid.numnodesy =
+      MAX(floor((world_grid.ymax - world_grid.ymin) / simdata->params.dx), 1);
+  world_grid.numnodesz =
+      MAX(floor((world_grid.zmax - world_grid.zmin) / simdata->params.dx), 1);
+
+  process->world->world_grid = world_grid;
+
+  int size_direction[3*3]; //{size m, start m, end m, size n, ... }
+  size_process(process->coords, process->world, size_direction);
+
+  sim_grid.xmin = rhoin_grid.xmin + size_direction[1]*simdata->params.dx;
+  sim_grid.xmax = rhoin_grid.xmin + size_direction[2]*simdata->params.dx;
+  sim_grid.ymin = rhoin_grid.ymin + size_direction[4]*simdata->params.dx;
+  sim_grid.ymax = rhoin_grid.ymin + size_direction[5]*simdata->params.dx;
+  sim_grid.zmin = rhoin_grid.zmin + size_direction[7]*simdata->params.dx;
+  sim_grid.zmax = rhoin_grid.zmin + size_direction[8]*simdata->params.dx;
 
   sim_grid.numnodesx =
       MAX(floor((sim_grid.xmax - sim_grid.xmin) / simdata->params.dx), 1);
@@ -1461,22 +1469,6 @@ void init_simulation(simulation_data_t *simdata, const char *params_filename, pr
         "Error while converting input map to simulation grid. Aborting...\n\n");
     exit(1);
   }
-
-    world_grid.xmin = rhoin_grid.xmin;
-    world_grid.xmax = rhoin_grid.xmax;
-    world_grid.ymin = rhoin_grid.ymin;
-    world_grid.ymax = rhoin_grid.ymax;
-    world_grid.zmin = rhoin_grid.zmin;
-    world_grid.zmax = rhoin_grid.zmax;
-
-    world_grid.numnodesx =
-      MAX(floor((world_grid.xmax - world_grid.xmin) / simdata->params.dx), 1);
-    world_grid.numnodesy =
-        MAX(floor((world_grid.ymax - world_grid.ymin) / simdata->params.dx), 1);
-    world_grid.numnodesz =
-        MAX(floor((world_grid.zmax - world_grid.zmin) / simdata->params.dx), 1);
-  
-  process->world->world_grid = world_grid;
 
   if(process->world_rank == 0)
   {
@@ -1541,9 +1533,6 @@ void init_simulation(simulation_data_t *simdata, const char *params_filename, pr
   fill_data(simdata->vyold, 0.0);
   fill_data(simdata->vznew, 0.0);
   fill_data(simdata->vzold, 0.0);
-
-  int size_direction[3*3]; //{size m, start m, end m, size n, ... }
-  size_process(process->coords, process->world, size_direction);
 
   process->px_bdy = malloc(sizeof(double*)*2);
   process->py_bdy = malloc(sizeof(double*)*2);
