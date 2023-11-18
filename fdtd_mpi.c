@@ -187,7 +187,6 @@ int main(int argc, char *argv[]) {
   double start = GET_TIME();
   for (int tstep = 0; tstep <= numtimesteps; tstep++) {
     apply_source(&simdata, tstep);
-
     if (simdata.params.outrate > 0 && (tstep % simdata.params.outrate) == 0) {
       double* tmpbuf = NULL;
       int*    counts = NULL;
@@ -197,6 +196,7 @@ int main(int argc, char *argv[]) {
       size_process(my_process->coords, my_world, my_size);
 
       if (my_process->world_rank == 0) {
+
         int size = my_world->world_grid.numnodesx * my_world->world_grid.numnodesy * my_world->world_grid.numnodesz;
         tmpbuf = (double*)malloc(sizeof(double)*size); 
         counts = (int*)malloc(sizeof(int)*my_world->world_size);
@@ -242,7 +242,8 @@ int main(int argc, char *argv[]) {
         default:
           break;
         }
-        
+        printf("ok %d ==> %d; %d\n", tstep, my_process->world_rank, i);
+        fflush(stdout);
         if(my_process->world_rank == 0)
         {
           double time = tstep * simdata.params.dt;
