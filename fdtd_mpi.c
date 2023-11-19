@@ -256,34 +256,40 @@ int main(int argc, char *argv[]) {
         data_t *output_data = NULL;
         switch (simdata.params.outputs[i].source) {
         case PRESSURE:
+
+        printf("ok P %d ==> %d; %d\n", tstep, my_process->world_rank, i);
           MPI_Gatherv(simdata.pold->vals, my_size[0] * my_size[3] * my_size[6], MPI_DOUBLE, tmpbuf, counts, displs, MPI_DOUBLE, 0, my_world->cart_comm);
           sort_subgrid_to_grid(tmpbuf, counts, my_world->p_out->vals, my_world);
           output_data = my_world->p_out;
-
+        fflush(stdout);
+        MPI_Barrier( my_world->cart_comm);
           break;
         case VELOCITYX:
+        printf("ok VX %d ==> %d; %d\n", tstep, my_process->world_rank, i);
+        fflush(stdout);
           MPI_Gatherv(simdata.vxold->vals, my_size[0] * my_size[3] * my_size[6], MPI_DOUBLE, tmpbuf, counts, displs, MPI_DOUBLE, 0, my_world->cart_comm);
           sort_subgrid_to_grid(tmpbuf, counts, my_world->vx_out->vals, my_world);
           output_data = my_world->vx_out;
 
           break;
         case VELOCITYY:
+        
           MPI_Gatherv(simdata.vyold->vals, my_size[0] * my_size[3] * my_size[6], MPI_DOUBLE, tmpbuf, counts, displs, MPI_DOUBLE, 0, my_world->cart_comm);
           sort_subgrid_to_grid(tmpbuf, counts, my_world->vy_out->vals, my_world);
           output_data = my_world->vy_out;
-          
+        printf("ok VY %d ==> %d; %d\n", tstep, my_process->world_rank, i);
+        fflush(stdout);  
           break;
         case VELOCITYZ:
           MPI_Gatherv(simdata.vzold->vals, my_size[0] * my_size[3] * my_size[6], MPI_DOUBLE, tmpbuf, counts, displs, MPI_DOUBLE, 0, my_world->cart_comm);
           sort_subgrid_to_grid(tmpbuf, counts, my_world->vz_out->vals, my_world);
           output_data = my_world->vz_out;
-
+        printf("ok VZ %d ==> %d; %d\n", tstep, my_process->world_rank, i);
+        fflush(stdout);
           break;
         default:
           break;
         }
-        printf("ok %d ==> %d; %d\n", tstep, my_process->world_rank, i);
-        fflush(stdout);
         if(my_process->world_rank == 0)
         {
           double time = tstep * simdata.params.dt;
