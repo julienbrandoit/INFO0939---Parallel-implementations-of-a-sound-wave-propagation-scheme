@@ -7,7 +7,7 @@
 
 module load OpenMPI
 
-mpicc fdtd_mpi.c -o fdtd_mpi -lm
+mpicc fdtd_mpi.c -o bin/fdtd_mpi -lm
 cd ./example_inputs/simple3d
-srun ../../fdtd_mpi param_3d.txt 3 1 1 
+mpirun -np 3 valgrind ../../bin/fdtd_mpi param_3d.txt 3 1 1 
 cd ../..
