@@ -221,7 +221,7 @@ typedef struct world {
   int periods[3];
   int reorder;
 
-  grid_t world_grid;
+  grid_t world_grid; 
 
   data_t *p_out; 
   data_t *vx_out;
@@ -238,9 +238,9 @@ typedef struct process {
   double **py_bdy;
   double **pz_bdy;
 
-  double *vx_bdy;
-  double *vy_bdy;
-  double *vz_bdy;
+  double **vx_bdy;
+  double **vy_bdy;
+  double **vz_bdy;
 
   world_s *world;
 
