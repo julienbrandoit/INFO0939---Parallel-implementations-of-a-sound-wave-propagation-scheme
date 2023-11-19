@@ -219,6 +219,8 @@ int main(int argc, char *argv[]) {
 
   double start = GET_TIME();
   for (int tstep = 0; tstep <= numtimesteps; tstep++) {
+    printf("TSTEP = %d\n", tstep);
+    fflush(stdout);
     apply_source(&simdata, tstep);
     if (simdata.params.outrate > 0 && (tstep % simdata.params.outrate) == 0) {
       double* tmpbuf = NULL;
@@ -1176,15 +1178,13 @@ void update_pressure(simulation_data_t *simdata, process_s *process) {
         dvy -= n > 0 ? GETVALUE(simdata->vyold, m, n - 1, p) : 0.0;
         dvz -= p > 0 ? GETVALUE(simdata->vzold, m, n, p - 1) : 0.0;
 
-        process->px_bdy[0][p*numnodesy+n] = GETVALUE(simdata->pold, m, n, p);
-        printf("DEBUG iteration nb = %d",p*numnodesy+n);
-        printf("px_bdy size = %d", size_direction[3]*size_direction[6]);
-        SETVALUE(simdata->pnew, m, n, p,
-                 GETVALUE(simdata->pold, m, n, p) - rhoc2dtdx * (dvx + dvy + dvz));
+        double value = GETVALUE(simdata->pold, m, n, p) - rhoc2dtdx * (dvx + dvy + dvz);
+
+        process->px_bdy[0][p*numnodesy+n] = value;
+        SETVALUE(simdata->pnew, m, n, p, value);
     }
   }
   MPI_Isend(process->px_bdy[0], numnodesy*numnodesz, MPI_DOUBLE, process->neighbors[LEFT], 0, process->world->cart_comm, &requestx);
-  
   int n = numnodesy - 1;
   for (int p = 0; p < numnodesz; p++) {
     for (int m = 0; m < numnodesx; m++) {
@@ -1199,14 +1199,13 @@ void update_pressure(simulation_data_t *simdata, process_s *process) {
         dvy -= n > 0 ? GETVALUE(simdata->vyold, m, n - 1, p) : 0.0;
         dvz -= p > 0 ? GETVALUE(simdata->vzold, m, n, p - 1) : 0.0;
 
-        process->py_bdy[0][p*numnodesx+m] = GETVALUE(simdata->pold, m, n, p);
-      
-        SETVALUE(simdata->pnew, m, n, p,
-                 GETVALUE(simdata->pold, m, n, p) - rhoc2dtdx * (dvx + dvy + dvz));
+        double value = GETVALUE(simdata->pold, m, n, p) - rhoc2dtdx * (dvx + dvy + dvz);
+
+        process->py_bdy[0][p*numnodesx+m] = value;
+        SETVALUE(simdata->pnew, m, n, p, value);
     }
   }
   MPI_Isend(process->py_bdy[0], numnodesx*numnodesz, MPI_DOUBLE, process->neighbors[DOWN], 1, process->world->cart_comm, &requesty);
-
   int p = numnodesz - 1;
   for (int n = 0; n < numnodesy; n++) {
     for (int m = 0; m < numnodesx; m++) {
@@ -1221,10 +1220,10 @@ void update_pressure(simulation_data_t *simdata, process_s *process) {
         dvy -= n > 0 ? GETVALUE(simdata->vyold, m, n - 1, p) : 0.0;
         dvz -= p > 0 ? GETVALUE(simdata->vzold, m, n, p - 1) : 0.0;
 
-        process->pz_bdy[0][n*numnodesx+m] = GETVALUE(simdata->pold, m, n, p);
-      
-        SETVALUE(simdata->pnew, m, n, p,
-                 GETVALUE(simdata->pold, m, n, p) - rhoc2dtdx * (dvx + dvy + dvz));
+        double value = GETVALUE(simdata->pold, m, n, p) - rhoc2dtdx * (dvx + dvy + dvz);
+
+        process->pz_bdy[0][n*numnodesx+m] = value;
+        SETVALUE(simdata->pnew, m, n, p, value);
     }
   }
   MPI_Isend(process->pz_bdy[0], numnodesy*numnodesx, MPI_DOUBLE, process->neighbors[BACKWARD], 2, process->world->cart_comm, &requestz);
@@ -1252,10 +1251,22 @@ void update_pressure(simulation_data_t *simdata, process_s *process) {
       }
     }
   }
+
+  MPI_Barrier(process->world->cart_comm);
+  fflush(stdout);
+  printf("ok b %d\n", process->world_rank);
+  fflush(stdout);
+  MPI_Barrier(process->world->cart_comm);
+
   MPI_Recv(process->vx_bdy[1], numnodesy*numnodesz, MPI_DOUBLE, process->neighbors[LEFT], 3, process->world->cart_comm, MPI_STATUS_IGNORE);
   MPI_Recv(process->vy_bdy[1], numnodesx*numnodesz, MPI_DOUBLE, process->neighbors[DOWN], 4, process->world->cart_comm, MPI_STATUS_IGNORE);
   MPI_Recv(process->vz_bdy[1], numnodesx*numnodesy, MPI_DOUBLE, process->neighbors[BACKWARD], 5, process->world->cart_comm, MPI_STATUS_IGNORE);
 
+  MPI_Barrier(process->world->cart_comm);
+  fflush(stdout);
+  printf("ok a %d\n", process->world_rank);
+  fflush(stdout);
+  MPI_Barrier(process->world->cart_comm);
   
   for (int p = 0; p < numnodesz; p++) {
     for (int n = 0; n < numnodesy; n++) {
