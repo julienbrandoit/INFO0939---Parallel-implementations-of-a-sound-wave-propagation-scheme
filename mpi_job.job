@@ -1,13 +1,13 @@
 #!/bin/bash
 #SBATCH --job-name="MPI please work ?"
-#SBATCH --ntasks=2
+#SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
 #SBATCH --time=05:00
 #SBATCH --output=mpi_out.out
 
 module load OpenMPI
 
-mpicc fdtd_mpi.c -o bin/fdtd_mpi -lm -g -fsanitize=address
+mpicc fdtd_mpi.c -o bin/fdtd_mpi -lm -g -fsanitize=address -fno-omit-frame-pointer
 cd ./example_inputs/simple3d
-srun ../../bin/fdtd_mpi param_3d.txt 2 1 1
+srun ../../bin/fdtd_mpi param_3d.txt 1 1 1
 cd ../..

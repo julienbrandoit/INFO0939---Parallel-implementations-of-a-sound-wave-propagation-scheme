@@ -48,25 +48,30 @@ void init_world(world_s **world, int dims[3], int periods[3], int reorder)
     printf("== PROCESSES CREATION (mpi implementation) == \n");
     fflush(stdout);
   }
-
+  MPI_Barrier((*world)->cart_comm);
 } 
 
 void free_world(world_s *world)
 {
+  int r;
+  MPI_Comm_rank(world->cart_comm , &r);
+  if(r == 0)
+  {
+    free(world->p_out->vals);
+    free(world->p_out);
+
+    free(world->vx_out->vals);
+    free(world->vx_out);
+
+    free(world->vy_out->vals);
+    free(world->vy_out);
+
+    free(world->vz_out->vals);
+    free(world->vz_out);
+  }
+
   MPI_Comm_free(&(world->cart_comm));
-
-  free(world->p_out->vals);
-  free(world->p_out);
-
-  free(world->vx_out->vals);
-  free(world->vx_out);
-
-  free(world->vy_out->vals);
-  free(world->vy_out);
-
-  free(world->vz_out->vals);
-  free(world->vz_out);
-
+  
   free(world);
 }
 
@@ -92,14 +97,15 @@ void init_process(process_s **process, world_s *world)
 
   // Initialization of the neighbors of the process
   MPI_Cart_shift(world->cart_comm, 0, 1, 
-                  &((*process)->neighbors)[UP], &((*process)->neighbors)[DOWN]);
-  MPI_Cart_shift(world->cart_comm, 1, 1, 
                   &((*process)->neighbors)[LEFT], &((*process)->neighbors)[RIGHT]);
+  MPI_Cart_shift(world->cart_comm, 1, 1, 
+                  &((*process)->neighbors)[UP], &((*process)->neighbors)[DOWN]);
   MPI_Cart_shift(world->cart_comm, 2, 1, 
                   &((*process)->neighbors)[FORWARD], &((*process)->neighbors)[BACKWARD]);
   
   printf("Process : world_rank = %d, cart_rank = %d, coords = (%d, %d, %d)\n", (*process)->world_rank,(*process)->cart_rank, (*process)->coords[0], (*process)->coords[1], (*process)->coords[2]); 
   fflush(stdout);
+  MPI_Barrier(world->cart_comm);
 } 
 
 void free_process(process_s *process)
@@ -220,10 +226,8 @@ int main(int argc, char *argv[]) {
 
   double start = GET_TIME();
   for (int tstep = 0; tstep <= numtimesteps; tstep++) {
-    printf("TSTEP = %d\n", tstep);
-    fflush(stdout);
     apply_source(&simdata, tstep);
-    /*if (simdata.params.outrate > 0 && (tstep % simdata.params.outrate) == 0) {
+    if (simdata.params.outrate > 0 && (tstep % simdata.params.outrate) == 0) {
       double* tmpbuf = NULL;
       int*    counts = NULL;
       int*    displs = NULL;
@@ -298,7 +302,7 @@ int main(int argc, char *argv[]) {
         free(counts);
         free(displs);
       }
-    }*/
+    }
 
     if (my_process->world_rank == 0) {
       if (tstep > 0 && tstep % (numtimesteps / 10) == 0) {
@@ -347,15 +351,8 @@ int main(int argc, char *argv[]) {
     printf("\nElapsed %.6lf seconds (%.3lf Mupdates/s)\n\n", elapsed, updatespers);
   }
 
-  MPI_Barrier(my_world->cart_comm);
   finalize_simulation(&simdata, my_process);
-  printf("Ok bb %d ...\n", my_process->world_rank);
   
-  MPI_Barrier(my_world->cart_comm);
-  fflush(stdout);
-  printf("Ok %d ...\n", my_process->world_rank);
-  fflush(stdout);
-  MPI_Barrier(my_world->cart_comm);
   free_process(my_process);
   free_world(my_world);
 
@@ -1187,13 +1184,18 @@ void update_pressure(simulation_data_t *simdata, process_s *process) {
   MPI_Isend(process->vx_bdy[0], numnodesy*numnodesz, MPI_DOUBLE, process->neighbors[RIGHT], 3, process->world->cart_comm, &requestx_v);
   MPI_Isend(process->vy_bdy[0], numnodesx*numnodesz, MPI_DOUBLE, process->neighbors[UP], 4, process->world->cart_comm, &requesty_v);
   MPI_Isend(process->vz_bdy[0], numnodesy*numnodesx, MPI_DOUBLE, process->neighbors[FORWARD], 5, process->world->cart_comm, &requestz_v);
+    
+  MPI_Recv(process->vx_bdy[1], numnodesy*numnodesz, MPI_DOUBLE, process->neighbors[LEFT], 3, process->world->cart_comm, MPI_STATUS_IGNORE);
+  MPI_Recv(process->vy_bdy[1], numnodesx*numnodesz, MPI_DOUBLE, process->neighbors[DOWN], 4, process->world->cart_comm, MPI_STATUS_IGNORE);
+  MPI_Recv(process->vz_bdy[1], numnodesx*numnodesy, MPI_DOUBLE, process->neighbors[BACKWARD], 5, process->world->cart_comm, MPI_STATUS_IGNORE);
 
   int size_direction[3*3];
   size_process(process->coords, process->world, size_direction);
 
   int m = numnodesx - 1;
-  for (int p = 1; p < numnodesz; p++) {
-    for (int n = 1; n < numnodesy; n++) {
+  /*HERE,p=0 and n =0, not well done because we have to get the value in the bdy, not say that this is 0 (0 only for the 'real bdy' of the domain)*/
+  for (int p = 0; p < numnodesz; p++) {
+    for (int n = 0; n < numnodesy; n++) {
         double rhoc2dtdx = GETVALUE(simdata->rho, m, n, p) *
                            GETVALUE(simdata->c, m, n, p) *
                            GETVALUE(simdata->c, m, n, p) * dtdx;
@@ -1213,8 +1215,9 @@ void update_pressure(simulation_data_t *simdata, process_s *process) {
   }
   MPI_Isend(process->px_bdy[0], numnodesy*numnodesz, MPI_DOUBLE, process->neighbors[LEFT], 0, process->world->cart_comm, &requestx_p);
   int n = numnodesy - 1;
-  for (int p = 1; p < numnodesz; p++) {
-    for (int m = 1; m < numnodesx; m++) {
+  /*HERE,p=0 and m =0, not well done because we have to get the value in the bdy, not say that this is 0 (0 only for the 'real bdy' of the domain)*/
+  for (int p = 0; p < numnodesz; p++) {
+    for (int m = 0; m < numnodesx; m++) {
         double rhoc2dtdx = GETVALUE(simdata->rho, m, n, p) *
                            GETVALUE(simdata->c, m, n, p) *
                            GETVALUE(simdata->c, m, n, p) * dtdx;
@@ -1234,8 +1237,9 @@ void update_pressure(simulation_data_t *simdata, process_s *process) {
   }
   MPI_Isend(process->py_bdy[0], numnodesx*numnodesz, MPI_DOUBLE, process->neighbors[DOWN], 1, process->world->cart_comm, &requesty_p);
   int p = numnodesz - 1;
-  for (int n = 1; n < numnodesy; n++) {
-    for (int m = 1; m < numnodesx; m++) {
+  /*HERE,n=0 and m =0, not well done because we have to get the value in the bdy, not say that this is 0 (0 only for the 'real bdy' of the domain)*/
+  for (int n = 0; n < numnodesy; n++) {
+    for (int m = 0; m < numnodesx; m++) {
         double rhoc2dtdx = GETVALUE(simdata->rho, m, n, p) *
                            GETVALUE(simdata->c, m, n, p) *
                            GETVALUE(simdata->c, m, n, p) * dtdx;
@@ -1255,9 +1259,9 @@ void update_pressure(simulation_data_t *simdata, process_s *process) {
   }
   MPI_Isend(process->pz_bdy[0], numnodesy*numnodesx, MPI_DOUBLE, process->neighbors[BACKWARD], 2, process->world->cart_comm, &requestz_p);
 
-  for (int p = 1; p < numnodesz - 1; p++) {
-    for (int n = 1; n < numnodesy - 1; n++) {
-      for (int m = 1; m < numnodesx - 1; m++) {
+  for (int p = 0; p < numnodesz - 1; p++) {
+    for (int n = 0; n < numnodesy - 1; n++) {
+      for (int m = 0; m < numnodesx - 1; m++) {
         double c = GETVALUE(simdata->c, m, n, p);
         double rho = GETVALUE(simdata->rho, m, n, p);
 
@@ -1267,48 +1271,14 @@ void update_pressure(simulation_data_t *simdata, process_s *process) {
         double dvy = GETVALUE(simdata->vyold, m, n, p);
         double dvz = GETVALUE(simdata->vzold, m, n, p);
 
-        dvx -= m > 0 ? GETVALUE(simdata->vxold, m - 1, n, p) : 0.0;
-        dvy -= n > 0 ? GETVALUE(simdata->vyold, m, n - 1, p) : 0.0;
-        dvz -= p > 0 ? GETVALUE(simdata->vzold, m, n, p - 1) : 0.0;
+        //HERE WE SHOULD VERIFY THAT THE v_bdy[1] is always 0 for 'real bdy' process.
+        dvx -= m > 0 ? GETVALUE(simdata->vxold, m - 1, n, p) : process->vx_bdy[1][p*numnodesy+n];
+        dvy -= n > 0 ? GETVALUE(simdata->vyold, m, n - 1, p) : process->vy_bdy[1][p*numnodesx+m];
+        dvz -= p > 0 ? GETVALUE(simdata->vzold, m, n, p - 1) : process->vz_bdy[1][n*numnodesx+m];
 
         double prev_p = GETVALUE(simdata->pold, m, n, p);
 
-        SETVALUE(simdata->pnew, m, n, p,
-                 prev_p - rhoc2dtdx * (dvx + dvy + dvz));
-      }
-    }
-  }
-  
-  MPI_Recv(process->vx_bdy[1], numnodesy*numnodesz, MPI_DOUBLE, process->neighbors[LEFT], 3, process->world->cart_comm, MPI_STATUS_IGNORE);
-  MPI_Recv(process->vy_bdy[1], numnodesx*numnodesz, MPI_DOUBLE, process->neighbors[DOWN], 4, process->world->cart_comm, MPI_STATUS_IGNORE);
-  MPI_Recv(process->vz_bdy[1], numnodesx*numnodesy, MPI_DOUBLE, process->neighbors[BACKWARD], 5, process->world->cart_comm, MPI_STATUS_IGNORE);
-
-  for (int p = 0; p < numnodesz; p++) {
-    for (int n = 0; n < numnodesy; n++) {
-      for (int m = 0; m < numnodesx; m++){
-          double rhoc2dtdx = GETVALUE(simdata->rho, m, n, p) *
-                            GETVALUE(simdata->c, m, n, p) *
-                            GETVALUE(simdata->c, m, n, p) * dtdx;
-          double dvx = GETVALUE(simdata->vxold, 0, n, p);
-          double dvy = GETVALUE(simdata->vyold, m, 0, p);
-          double dvz = GETVALUE(simdata->vzold, m, n, 0);
-
-          dvx -= process->vx_bdy[1][p*numnodesy+n];
-          dvy -= process->vy_bdy[1][p*numnodesx+m];
-          dvz -= process->vz_bdy[1][n*numnodesx+m];
-
-          if(m == 0){
-            SETVALUE(simdata->pnew, 0, n, p,
-                    GETVALUE(simdata->pold, 0, n, p) - rhoc2dtdx * (dvx + dvy + dvz));
-          }
-          if(n == 0){
-            SETVALUE(simdata->pnew, m, 0, p,
-                    GETVALUE(simdata->pold, m, 0, p) - rhoc2dtdx * (dvx + dvy + dvz));
-          }
-          if(p == 0){
-            SETVALUE(simdata->pnew, m, n, 0,
-                    GETVALUE(simdata->pold, m, n, 0) - rhoc2dtdx * (dvx + dvy + dvz));
-          }
+        SETVALUE(simdata->pnew, m, n, p, prev_p - rhoc2dtdx * (dvx + dvy + dvz));
       }
     }
   }
@@ -1338,112 +1308,60 @@ void update_velocities(simulation_data_t *simdata, process_s *process) {
   MPI_Recv(process->py_bdy[1], numnodesx*numnodesz, MPI_DOUBLE, process->neighbors[UP], 1, process->world->cart_comm, MPI_STATUS_IGNORE);
   MPI_Recv(process->pz_bdy[1], numnodesy*numnodesx, MPI_DOUBLE, process->neighbors[FORWARD], 2, process->world->cart_comm, MPI_STATUS_IGNORE);
 
-  int m = numnodesx - 1;
   for (int p = 0; p < numnodesz; p++) {
     for (int n = 0; n < numnodesy; n++) {
-        int mp1 = MIN(numnodesx - 1, m + 1);
-        int np1 = MIN(numnodesy - 1, n + 1);
-        int pp1 = MIN(numnodesz - 1, p + 1);
-
-        double dtdxrho = dtdx / GETVALUE(simdata->rhohalf, m, n, p);
-
-        double p_mnq = process->px_bdy[1][p*numnodesy+n];
-
-        double dpx = GETVALUE(simdata->pnew, mp1, n, p) - p_mnq;
-        double dpy = GETVALUE(simdata->pnew, m, np1, p) - p_mnq;
-        double dpz = GETVALUE(simdata->pnew, m, n, pp1) - p_mnq;
-
-        double prev_vx = GETVALUE(simdata->vxold, m, n, p);
-        double prev_vy = GETVALUE(simdata->vyold, m, n, p);
-        double prev_vz = GETVALUE(simdata->vzold, m, n, p);
-
-        double value = prev_vx - dtdxrho * dpx;
-        process->vx_bdy[0][p*numnodesy+n] = value; 
-
-        SETVALUE(simdata->vxnew, m, n, p, value);
-        SETVALUE(simdata->vynew, m, n, p, prev_vy - dtdxrho * dpy);
-        SETVALUE(simdata->vznew, m, n, p, prev_vz - dtdxrho * dpz);
-    }
-  }
-
-  int n = numnodesy - 1;
-  for (int p = 0; p < numnodesz; p++) {
-    for (int m = 0; m < numnodesx; m++) {
-        int mp1 = MIN(numnodesx - 1, m + 1);
-        int np1 = MIN(numnodesy - 1, n + 1);
-        int pp1 = MIN(numnodesz - 1, p + 1);
-
-        double dtdxrho = dtdx / GETVALUE(simdata->rhohalf, m, n, p);
-
-        double p_mnq = process->py_bdy[1][p*numnodesx+m];
-
-        double dpx = GETVALUE(simdata->pnew, mp1, n, p) - p_mnq;
-        double dpy = GETVALUE(simdata->pnew, m, np1, p) - p_mnq;
-        double dpz = GETVALUE(simdata->pnew, m, n, pp1) - p_mnq;
-
-        double prev_vx = GETVALUE(simdata->vxold, m, n, p);
-        double prev_vy = GETVALUE(simdata->vyold, m, n, p);
-        double prev_vz = GETVALUE(simdata->vzold, m, n, p);
-
-        double value = prev_vy -  dtdxrho * dpy;
-        process->vy_bdy[0][p*numnodesx+m] = value;
-
-        SETVALUE(simdata->vxnew, m, n, p, prev_vx - dtdxrho * dpx);
-        SETVALUE(simdata->vynew, m, n, p, value);
-        SETVALUE(simdata->vznew, m, n, p, prev_vz - dtdxrho * dpz);
-    }
-  }
-
-  int p = numnodesz - 1;
-  for (int n = 0; n < numnodesy; n++) {
-    for (int m = 0; m < numnodesz; m++) {
-        int mp1 = MIN(numnodesx - 1, m + 1);
-        int np1 = MIN(numnodesy - 1, n + 1);
-        int pp1 = MIN(numnodesz - 1, p + 1);
-
-        double dtdxrho = dtdx / GETVALUE(simdata->rhohalf, m, n, p);
-
-        double p_mnq = process->pz_bdy[1][n*numnodesx+m];
-
-        double dpx = GETVALUE(simdata->pnew, mp1, n, p) - p_mnq;
-        double dpy = GETVALUE(simdata->pnew, m, np1, p) - p_mnq;
-        double dpz = GETVALUE(simdata->pnew, m, n, pp1) - p_mnq;
-
-        double prev_vx = GETVALUE(simdata->vxold, m, n, p);
-        double prev_vy = GETVALUE(simdata->vyold, m, n, p);
-        double prev_vz = GETVALUE(simdata->vzold, m, n, p);
-
-        double value = prev_vz - dtdxrho * dpz;
-        process->vz_bdy[0][n*numnodesx+m] = value;
-
-        SETVALUE(simdata->vxnew, m, n, p, prev_vx - dtdxrho * dpx);
-        SETVALUE(simdata->vynew, m, n, p, prev_vy - dtdxrho * dpy);
-        SETVALUE(simdata->vznew, m, n, p, value);
-    }
-  }
-
-  for (int p = 0; p < numnodesz - 1; p++) {
-    for (int n = 0; n < numnodesy - 1; n++) {
-      for (int m = 0; m < numnodesx - 1; m++) {
-        int mp1 = MIN(numnodesx - 1, m + 1);
-        int np1 = MIN(numnodesy - 1, n + 1);
-        int pp1 = MIN(numnodesz - 1, p + 1);
-
+      for (int m = 0; m < numnodesx; m++) {
         double dtdxrho = dtdx / GETVALUE(simdata->rhohalf, m, n, p);
 
         double p_mnq = GETVALUE(simdata->pnew, m, n, p);
+        double dpx, dpy, dpz;
 
-        double dpx = GETVALUE(simdata->pnew, mp1, n, p) - p_mnq;
-        double dpy = GETVALUE(simdata->pnew, m, np1, p) - p_mnq;
-        double dpz = GETVALUE(simdata->pnew, m, n, pp1) - p_mnq;
+        if(m == numnodesx - 1)
+        {
+          dpx = process->neighbors[RIGHT] >= 0 ? process->px_bdy[1][p*numnodesy+n] : 0;
+        }else
+        {
+          dpx = GETVALUE(simdata->pnew, m+1, n, p) - p_mnq;
+        }
+        if(n == numnodesy - 1)
+        {
+          dpy = process->neighbors[UP] >= 0 ? process->py_bdy[1][p*numnodesx+m] : 0;
+        }else
+        {
+          dpy = GETVALUE(simdata->pnew, m, n+1, p) - p_mnq;
+        }
+        if(p == numnodesz - 1)
+        {
+          dpz = process->neighbors[FORWARD] >= 0 ? process->pz_bdy[1][n*numnodesx+m] : 0;
+        }else
+        {
+          dpz = GETVALUE(simdata->pnew, m, n, p+1) - p_mnq;
+        }
 
         double prev_vx = GETVALUE(simdata->vxold, m, n, p);
         double prev_vy = GETVALUE(simdata->vyold, m, n, p);
         double prev_vz = GETVALUE(simdata->vzold, m, n, p);
 
-        SETVALUE(simdata->vxnew, m, n, p, prev_vx - dtdxrho * dpx);
-        SETVALUE(simdata->vynew, m, n, p, prev_vy - dtdxrho * dpy);
-        SETVALUE(simdata->vznew, m, n, p, prev_vz - dtdxrho * dpz);
+        double value_x = prev_vx - dtdxrho * dpx;
+        double value_y = prev_vy - dtdxrho * dpy;
+        double value_z = prev_vz - dtdxrho * dpz;
+        
+        SETVALUE(simdata->vxnew, m, n, p, value_x);
+        SETVALUE(simdata->vynew, m, n, p, value_y);
+        SETVALUE(simdata->vznew, m, n, p, value_z);
+        
+        if(m == numnodesx - 1)
+        {
+          process->vx_bdy[0][p*numnodesy+n] = value_x; 
+        }
+        if(n == numnodesy - 1)
+        {
+          process->vy_bdy[0][p*numnodesx+m] = value_y; 
+        }
+        if(p == numnodesz - 1)
+        {
+          process->vz_bdy[0][n*numnodesx+m] = value_z; 
+        }
       }
     }
   }
@@ -1730,14 +1648,12 @@ void finalize_simulation(simulation_data_t *simdata, process_s *process) {
   free(simdata->rhohalf);
   free(simdata->c->vals);
   free(simdata->c);
-  printf("OK d\n");
-  fflush(stdout);
+  
   free(simdata->pold->vals);
   free(simdata->pold);
   free(simdata->pnew->vals);
   free(simdata->pnew);
-  printf("OK e\n");
-  fflush(stdout);
+  
   free(simdata->vxold->vals);
   free(simdata->vxold);
   free(simdata->vxnew->vals);
@@ -1750,8 +1666,6 @@ void finalize_simulation(simulation_data_t *simdata, process_s *process) {
   free(simdata->vzold);
   free(simdata->vznew->vals);
   free(simdata->vznew);
-  printf("OK f\n");
-  fflush(stdout);
 }
 
 void swap_timesteps(simulation_data_t *simdata) {
