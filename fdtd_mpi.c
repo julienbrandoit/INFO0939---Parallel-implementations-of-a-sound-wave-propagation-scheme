@@ -1179,10 +1179,13 @@ void update_pressure(simulation_data_t *simdata, process_s *process) {
   MPI_Request requestx_v;
   MPI_Request requesty_v;
   MPI_Request requestz_v;
+  
+  
 
   MPI_Isend(process->vx_bdy[0], numnodesy*numnodesz, MPI_DOUBLE, process->neighbors[RIGHT], 3, process->world->cart_comm, &requestx_v);
   MPI_Isend(process->vy_bdy[0], numnodesx*numnodesz, MPI_DOUBLE, process->neighbors[UP], 4, process->world->cart_comm, &requesty_v);
   MPI_Isend(process->vz_bdy[0], numnodesy*numnodesx, MPI_DOUBLE, process->neighbors[FORWARD], 5, process->world->cart_comm, &requestz_v);
+  
 
   MPI_Request requestx_p;
   MPI_Request requesty_p;
@@ -1192,8 +1195,8 @@ void update_pressure(simulation_data_t *simdata, process_s *process) {
   size_process(process->coords, process->world, size_direction);
 
   int m = numnodesx - 1;
-  for (int p = 0; p < numnodesz; p++) {
-    for (int n = 0; n < numnodesy; n++) {
+  for (int p = 1; p < numnodesz; p++) {
+    for (int n = 1; n < numnodesy; n++) {
         double rhoc2dtdx = GETVALUE(simdata->rho, m, n, p) *
                            GETVALUE(simdata->c, m, n, p) *
                            GETVALUE(simdata->c, m, n, p) * dtdx;
@@ -1213,8 +1216,8 @@ void update_pressure(simulation_data_t *simdata, process_s *process) {
   }
   MPI_Isend(process->px_bdy[0], numnodesy*numnodesz, MPI_DOUBLE, process->neighbors[LEFT], 0, process->world->cart_comm, &requestx_p);
   int n = numnodesy - 1;
-  for (int p = 0; p < numnodesz; p++) {
-    for (int m = 0; m < numnodesx; m++) {
+  for (int p = 1; p < numnodesz; p++) {
+    for (int m = 1; m < numnodesx; m++) {
         double rhoc2dtdx = GETVALUE(simdata->rho, m, n, p) *
                            GETVALUE(simdata->c, m, n, p) *
                            GETVALUE(simdata->c, m, n, p) * dtdx;
@@ -1234,8 +1237,8 @@ void update_pressure(simulation_data_t *simdata, process_s *process) {
   }
   MPI_Isend(process->py_bdy[0], numnodesx*numnodesz, MPI_DOUBLE, process->neighbors[DOWN], 1, process->world->cart_comm, &requesty_p);
   int p = numnodesz - 1;
-  for (int n = 0; n < numnodesy; n++) {
-    for (int m = 0; m < numnodesx; m++) {
+  for (int n = 1; n < numnodesy; n++) {
+    for (int m = 1; m < numnodesx; m++) {
         double rhoc2dtdx = GETVALUE(simdata->rho, m, n, p) *
                            GETVALUE(simdata->c, m, n, p) *
                            GETVALUE(simdata->c, m, n, p) * dtdx;
@@ -1278,7 +1281,8 @@ void update_pressure(simulation_data_t *simdata, process_s *process) {
       }
     }
   }
-
+  
+  printf("vx_bdy[0] = %f\n", process->vx_bdy[0][0]);
   MPI_Recv(process->vx_bdy[1], numnodesy*numnodesz, MPI_DOUBLE, process->neighbors[LEFT], 3, process->world->cart_comm, MPI_STATUS_IGNORE);
   MPI_Recv(process->vy_bdy[1], numnodesx*numnodesz, MPI_DOUBLE, process->neighbors[DOWN], 4, process->world->cart_comm, MPI_STATUS_IGNORE);
   MPI_Recv(process->vz_bdy[1], numnodesx*numnodesy, MPI_DOUBLE, process->neighbors[BACKWARD], 5, process->world->cart_comm, MPI_STATUS_IGNORE);
@@ -1632,6 +1636,23 @@ void init_simulation(simulation_data_t *simdata, const char *params_filename, pr
     fprintf(stderr, "Error: Memory allocation for process failed!\n");
     MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
   }
+
+  // Initialize the boundary values at the beginning of the simulation
+  process->px_bdy[0][0] = 0;
+  process->py_bdy[0][0] = 0;
+  process->pz_bdy[0][0] = 0;
+  process->vx_bdy[0][0] = 0;
+  process->vy_bdy[0][0] = 0;
+  process->vz_bdy[0][0] = 0;
+
+  process->px_bdy[1][0] = 0;
+  process->py_bdy[1][0] = 0;
+  process->pz_bdy[1][0] = 0;
+  process->vx_bdy[1][0] = 0;
+  process->vy_bdy[1][0] = 0;
+  process->vz_bdy[1][0] = 0;
+
+
 
   if(process->world_rank == 0)
   {
