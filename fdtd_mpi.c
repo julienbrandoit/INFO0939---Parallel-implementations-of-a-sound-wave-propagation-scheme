@@ -214,6 +214,7 @@ int main(int argc, char *argv[]) {
 
   printf("Process %d : init ok, starting computation ...\n", my_process->world_rank);
   fflush(stdout);
+  MPI_Barrier(my_world->cart_comm);
 
   int numtimesteps = floor(simdata.params.maxt / simdata.params.dt);
 
@@ -292,6 +293,11 @@ int main(int argc, char *argv[]) {
           write_output(&simdata.params.outputs[i], output_data, tstep, time);
         }
       }
+      if (my_process->world_rank == 0) {
+        free(tmpbuf);
+        free(counts);
+        free(displs);
+      }
     }
 
     if (my_process->world_rank == 0) {
@@ -326,19 +332,31 @@ int main(int argc, char *argv[]) {
     swap_timesteps(&simdata);
   }
 
+
+  MPI_Barrier(my_world->cart_comm);
+  fflush(stdout);
   printf("Process %d : end ok, will be free ...\n", my_process->world_rank);
+  fflush(stdout);
+  MPI_Barrier(my_world->cart_comm);
 
+  if (my_process->world_rank == 0) {
+    double elapsed = GET_TIME() - start;
+    double numupdates =
+        (double)NUMNODESTOT(simdata.pold->grid) * (numtimesteps + 1);
+    double updatespers = numupdates / elapsed / 1e6;
 
-  double elapsed = GET_TIME() - start;
-  double numupdates =
-      (double)NUMNODESTOT(simdata.pold->grid) * (numtimesteps + 1);
-  double updatespers = numupdates / elapsed / 1e6;
+    printf("\nElapsed %.6lf seconds (%.3lf Mupdates/s)\n\n", elapsed,
+          updatespers);
+  }
 
-  printf("\nElapsed %.6lf seconds (%.3lf Mupdates/s)\n\n", elapsed,
-         updatespers);
-
+  MPI_Barrier(my_world->cart_comm);
   finalize_simulation(&simdata);
-
+  
+  MPI_Barrier(my_world->cart_comm);
+  fflush(stdout);
+  printf("Ok %d ...\n", my_process->world_rank);
+  fflush(stdout);
+  MPI_Barrier(my_world->cart_comm);
   free_process(my_process);
   free_world(my_world);
 
@@ -1157,9 +1175,18 @@ void update_pressure(simulation_data_t *simdata, process_s *process) {
 
   We gain a factor of about 5 time faster !!
   */
-  MPI_Request requestx;
-  MPI_Request requesty;
-  MPI_Request requestz;
+
+  MPI_Request requestx_v;
+  MPI_Request requesty_v;
+  MPI_Request requestz_v;
+
+  MPI_Isend(process->vx_bdy[0], numnodesy*numnodesz, MPI_DOUBLE, process->neighbors[RIGHT], 3, process->world->cart_comm, &requestx_v);
+  MPI_Isend(process->vy_bdy[0], numnodesx*numnodesz, MPI_DOUBLE, process->neighbors[UP], 4, process->world->cart_comm, &requesty_v);
+  MPI_Isend(process->vz_bdy[0], numnodesy*numnodesx, MPI_DOUBLE, process->neighbors[FORWARD], 5, process->world->cart_comm, &requestz_v);
+
+  MPI_Request requestx_p;
+  MPI_Request requesty_p;
+  MPI_Request requestz_p;
 
   int size_direction[3*3];
   size_process(process->coords, process->world, size_direction);
@@ -1184,7 +1211,7 @@ void update_pressure(simulation_data_t *simdata, process_s *process) {
         SETVALUE(simdata->pnew, m, n, p, value);
     }
   }
-  MPI_Isend(process->px_bdy[0], numnodesy*numnodesz, MPI_DOUBLE, process->neighbors[LEFT], 0, process->world->cart_comm, &requestx);
+  MPI_Isend(process->px_bdy[0], numnodesy*numnodesz, MPI_DOUBLE, process->neighbors[LEFT], 0, process->world->cart_comm, &requestx_p);
   int n = numnodesy - 1;
   for (int p = 0; p < numnodesz; p++) {
     for (int m = 0; m < numnodesx; m++) {
@@ -1205,7 +1232,7 @@ void update_pressure(simulation_data_t *simdata, process_s *process) {
         SETVALUE(simdata->pnew, m, n, p, value);
     }
   }
-  MPI_Isend(process->py_bdy[0], numnodesx*numnodesz, MPI_DOUBLE, process->neighbors[DOWN], 1, process->world->cart_comm, &requesty);
+  MPI_Isend(process->py_bdy[0], numnodesx*numnodesz, MPI_DOUBLE, process->neighbors[DOWN], 1, process->world->cart_comm, &requesty_p);
   int p = numnodesz - 1;
   for (int n = 0; n < numnodesy; n++) {
     for (int m = 0; m < numnodesx; m++) {
@@ -1226,7 +1253,7 @@ void update_pressure(simulation_data_t *simdata, process_s *process) {
         SETVALUE(simdata->pnew, m, n, p, value);
     }
   }
-  MPI_Isend(process->pz_bdy[0], numnodesy*numnodesx, MPI_DOUBLE, process->neighbors[BACKWARD], 2, process->world->cart_comm, &requestz);
+  MPI_Isend(process->pz_bdy[0], numnodesy*numnodesx, MPI_DOUBLE, process->neighbors[BACKWARD], 2, process->world->cart_comm, &requestz_p);
 
   for (int p = 1; p < numnodesz - 1; p++) {
     for (int n = 1; n < numnodesy - 1; n++) {
@@ -1252,25 +1279,13 @@ void update_pressure(simulation_data_t *simdata, process_s *process) {
     }
   }
 
-  MPI_Barrier(process->world->cart_comm);
-  fflush(stdout);
-  printf("ok b %d\n", process->world_rank);
-  fflush(stdout);
-  MPI_Barrier(process->world->cart_comm);
-
   MPI_Recv(process->vx_bdy[1], numnodesy*numnodesz, MPI_DOUBLE, process->neighbors[LEFT], 3, process->world->cart_comm, MPI_STATUS_IGNORE);
   MPI_Recv(process->vy_bdy[1], numnodesx*numnodesz, MPI_DOUBLE, process->neighbors[DOWN], 4, process->world->cart_comm, MPI_STATUS_IGNORE);
   MPI_Recv(process->vz_bdy[1], numnodesx*numnodesy, MPI_DOUBLE, process->neighbors[BACKWARD], 5, process->world->cart_comm, MPI_STATUS_IGNORE);
 
-  MPI_Barrier(process->world->cart_comm);
-  fflush(stdout);
-  printf("ok a %d\n", process->world_rank);
-  fflush(stdout);
-  MPI_Barrier(process->world->cart_comm);
-  
   for (int p = 0; p < numnodesz; p++) {
     for (int n = 0; n < numnodesy; n++) {
-      for (int m = 0; p < numnodesx; m++){
+      for (int m = 0; m < numnodesx; m++){
           double rhoc2dtdx = GETVALUE(simdata->rho, m, n, p) *
                             GETVALUE(simdata->c, m, n, p) *
                             GETVALUE(simdata->c, m, n, p) * dtdx;
@@ -1297,7 +1312,6 @@ void update_pressure(simulation_data_t *simdata, process_s *process) {
       }
     }
   }
-
 }
 
 void update_velocities(simulation_data_t *simdata, process_s *process) {
@@ -1306,7 +1320,6 @@ void update_velocities(simulation_data_t *simdata, process_s *process) {
   const int numnodesx = NUMNODESX(simdata->vxold);
   const int numnodesy = NUMNODESY(simdata->vxold);
   const int numnodesz = NUMNODESZ(simdata->vxold);
-
 
   /*
   FROM LECTURE #1 about the memory hierarchy we know that it's better to avoid fetch data that will not be used if we have to used it later on.
@@ -1319,9 +1332,6 @@ void update_velocities(simulation_data_t *simdata, process_s *process) {
 
   We gain a factor of about 5 time faster !!
   */
-  MPI_Request requestx;
-  MPI_Request requesty;
-  MPI_Request requestz;
 
   
   MPI_Recv(process->px_bdy[1], numnodesy*numnodesz, MPI_DOUBLE, process->neighbors[RIGHT], 0, process->world->cart_comm, MPI_STATUS_IGNORE);
@@ -1347,14 +1357,14 @@ void update_velocities(simulation_data_t *simdata, process_s *process) {
         double prev_vy = GETVALUE(simdata->vyold, m, n, p);
         double prev_vz = GETVALUE(simdata->vzold, m, n, p);
 
-        process->vx_bdy[0][p*numnodesy+n] = GETVALUE(simdata->vxold, m, n, p);
+        double value = prev_vx - dtdxrho * dpx;
+        process->vx_bdy[0][p*numnodesy+n] = value; 
 
-        SETVALUE(simdata->vxnew, m, n, p, prev_vx - dtdxrho * dpx);
+        SETVALUE(simdata->vxnew, m, n, p, value);
         SETVALUE(simdata->vynew, m, n, p, prev_vy - dtdxrho * dpy);
         SETVALUE(simdata->vznew, m, n, p, prev_vz - dtdxrho * dpz);
     }
   }
-  MPI_Isend(process->vx_bdy[0], numnodesy*numnodesz, MPI_DOUBLE, process->neighbors[RIGHT], 3, process->world->cart_comm, &requestx);
 
   int n = numnodesy - 1;
   for (int p = 0; p < numnodesz; p++) {
@@ -1375,14 +1385,14 @@ void update_velocities(simulation_data_t *simdata, process_s *process) {
         double prev_vy = GETVALUE(simdata->vyold, m, n, p);
         double prev_vz = GETVALUE(simdata->vzold, m, n, p);
 
-        process->vy_bdy[0][p*numnodesx+m] = GETVALUE(simdata->vxold, m, n, p);
+        double value = prev_vy -  dtdxrho * dpy;
+        process->vy_bdy[0][p*numnodesx+m] = value;
 
         SETVALUE(simdata->vxnew, m, n, p, prev_vx - dtdxrho * dpx);
-        SETVALUE(simdata->vynew, m, n, p, prev_vy - dtdxrho * dpy);
+        SETVALUE(simdata->vynew, m, n, p, value);
         SETVALUE(simdata->vznew, m, n, p, prev_vz - dtdxrho * dpz);
     }
   }
-  MPI_Isend(process->vy_bdy[0], numnodesx*numnodesz, MPI_DOUBLE, process->neighbors[UP], 4, process->world->cart_comm, &requesty);
 
   int p = numnodesz - 1;
   for (int n = 0; n < numnodesy; n++) {
@@ -1403,14 +1413,14 @@ void update_velocities(simulation_data_t *simdata, process_s *process) {
         double prev_vy = GETVALUE(simdata->vyold, m, n, p);
         double prev_vz = GETVALUE(simdata->vzold, m, n, p);
 
-        process->vz_bdy[0][n*numnodesx+m] = GETVALUE(simdata->vxold, m, n, p);
+        double value = prev_vz - dtdxrho * dpz;
+        process->vz_bdy[0][n*numnodesx+m] = value;
 
         SETVALUE(simdata->vxnew, m, n, p, prev_vx - dtdxrho * dpx);
         SETVALUE(simdata->vynew, m, n, p, prev_vy - dtdxrho * dpy);
-        SETVALUE(simdata->vznew, m, n, p, prev_vz - dtdxrho * dpz);
+        SETVALUE(simdata->vznew, m, n, p, value);
     }
   }
-  MPI_Isend(process->vz_bdy[0], numnodesy*numnodesx, MPI_DOUBLE, process->neighbors[FORWARD], 5, process->world->cart_comm, &requestz);
 
   for (int p = 0; p < numnodesz - 1; p++) {
     for (int n = 0; n < numnodesy - 1; n++) {

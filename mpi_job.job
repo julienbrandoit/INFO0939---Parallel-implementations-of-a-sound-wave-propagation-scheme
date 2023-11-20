@@ -3,7 +3,7 @@
 #SBATCH --ntasks=3
 #SBATCH --cpus-per-task=1
 #SBATCH --time=05:00
-#SBATCH --output=mpi_out2.out
+#SBATCH --output=mpi_out.out
 
 module load OpenMPI
 
