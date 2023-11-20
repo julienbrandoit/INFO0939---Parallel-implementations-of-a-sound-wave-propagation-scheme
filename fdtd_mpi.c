@@ -129,25 +129,25 @@ void free_process(process_s *process)
 void size_process(int coord[3], world_s *world, int table[3*3])
 {
   int start_p = world->world_grid.numnodesz*coord[2]/(world->dims[2]);
-  int end_p = world->world_grid.numnodesz*(coord[2]+1)/world->dims[2] - 1;
+  int end_p = world->world_grid.numnodesz*(coord[2]+1)/world->dims[2];
   
   table[8] = end_p;
   table[7] = start_p;
-  table[6] = end_p - start_p + 1;
+  table[6] = end_p - start_p;
 
   int start_n = world->world_grid.numnodesy*coord[1]/(world->dims[1]);
-  int end_n = world->world_grid.numnodesy*(coord[1]+1)/world->dims[1] - 1;
+  int end_n = world->world_grid.numnodesy*(coord[1]+1)/world->dims[1];
 
   table[5] = end_n;
   table[4] = start_n;
-  table[3] = end_n - start_n + 1;
+  table[3] = end_n - start_n;
 
   int start_m = world->world_grid.numnodesx*coord[0]/(world->dims[0]);
-  int end_m = world->world_grid.numnodesx*(coord[0]+1)/world->dims[0] - 1;
+  int end_m =world->world_grid.numnodesx*(coord[0]+1)/world->dims[0];
 
   table[2] = end_m;
   table[1] = start_m;
-  table[0] = end_m - start_m + 1;
+  table[0] = end_m - start_m;
   
 }
 
@@ -223,7 +223,7 @@ int main(int argc, char *argv[]) {
     printf("TSTEP = %d\n", tstep);
     fflush(stdout);
     apply_source(&simdata, tstep);
-    if (simdata.params.outrate > 0 && (tstep % simdata.params.outrate) == 0) {
+    /*if (simdata.params.outrate > 0 && (tstep % simdata.params.outrate) == 0) {
       double* tmpbuf = NULL;
       int*    counts = NULL;
       int*    displs = NULL;
@@ -248,7 +248,7 @@ int main(int argc, char *argv[]) {
           int rank_coords[3];
           MPI_Cart_coords(my_world->cart_comm, rank, 3, rank_coords);
           size_process(rank_coords, my_world, rank_size);
-          displs[rank] = rank == 0 ? 0 : displs[rank-1] + counts [rank-1];
+          displs[rank] = rank == 0 ? 0 : displs[rank-1] + counts[rank-1];
           counts[rank] = rank_size[0] * rank_size[3] * rank_size[6];
         }
       }
@@ -298,7 +298,7 @@ int main(int argc, char *argv[]) {
         free(counts);
         free(displs);
       }
-    }
+    }*/
 
     if (my_process->world_rank == 0) {
       if (tstep > 0 && tstep % (numtimesteps / 10) == 0) {
@@ -341,16 +341,15 @@ int main(int argc, char *argv[]) {
 
   if (my_process->world_rank == 0) {
     double elapsed = GET_TIME() - start;
-    double numupdates =
-        (double)NUMNODESTOT(simdata.pold->grid) * (numtimesteps + 1);
+    double numupdates = (double)NUMNODESTOT(simdata.pold->grid) * (numtimesteps + 1);
     double updatespers = numupdates / elapsed / 1e6;
 
-    printf("\nElapsed %.6lf seconds (%.3lf Mupdates/s)\n\n", elapsed,
-          updatespers);
+    printf("\nElapsed %.6lf seconds (%.3lf Mupdates/s)\n\n", elapsed, updatespers);
   }
 
   MPI_Barrier(my_world->cart_comm);
-  finalize_simulation(&simdata);
+  finalize_simulation(&simdata, my_process);
+  printf("Ok bb %d ...\n", my_process->world_rank);
   
   MPI_Barrier(my_world->cart_comm);
   fflush(stdout);
@@ -1176,20 +1175,18 @@ void update_pressure(simulation_data_t *simdata, process_s *process) {
   We gain a factor of about 5 time faster !!
   */
 
+  
+  MPI_Request requestx_p;
+  MPI_Request requesty_p;
+  MPI_Request requestz_p;
+  
   MPI_Request requestx_v;
   MPI_Request requesty_v;
   MPI_Request requestz_v;
-  
-  
 
   MPI_Isend(process->vx_bdy[0], numnodesy*numnodesz, MPI_DOUBLE, process->neighbors[RIGHT], 3, process->world->cart_comm, &requestx_v);
   MPI_Isend(process->vy_bdy[0], numnodesx*numnodesz, MPI_DOUBLE, process->neighbors[UP], 4, process->world->cart_comm, &requesty_v);
   MPI_Isend(process->vz_bdy[0], numnodesy*numnodesx, MPI_DOUBLE, process->neighbors[FORWARD], 5, process->world->cart_comm, &requestz_v);
-  
-
-  MPI_Request requestx_p;
-  MPI_Request requesty_p;
-  MPI_Request requestz_p;
 
   int size_direction[3*3];
   size_process(process->coords, process->world, size_direction);
@@ -1282,7 +1279,6 @@ void update_pressure(simulation_data_t *simdata, process_s *process) {
     }
   }
   
-  printf("vx_bdy[0] = %f\n", process->vx_bdy[0][0]);
   MPI_Recv(process->vx_bdy[1], numnodesy*numnodesz, MPI_DOUBLE, process->neighbors[LEFT], 3, process->world->cart_comm, MPI_STATUS_IGNORE);
   MPI_Recv(process->vy_bdy[1], numnodesx*numnodesz, MPI_DOUBLE, process->neighbors[DOWN], 4, process->world->cart_comm, MPI_STATUS_IGNORE);
   MPI_Recv(process->vz_bdy[1], numnodesx*numnodesy, MPI_DOUBLE, process->neighbors[BACKWARD], 5, process->world->cart_comm, MPI_STATUS_IGNORE);
@@ -1451,7 +1447,6 @@ void update_velocities(simulation_data_t *simdata, process_s *process) {
       }
     }
   }
-
 }
 
 void init_simulation(simulation_data_t *simdata, const char *params_filename, process_s *process) {
@@ -1528,13 +1523,10 @@ void init_simulation(simulation_data_t *simdata, const char *params_filename, pr
   sim_grid.ymax = rhoin_grid.ymin + size_direction[5]*simdata->params.dx;
   sim_grid.zmin = rhoin_grid.zmin + size_direction[7]*simdata->params.dx;
   sim_grid.zmax = rhoin_grid.zmin + size_direction[8]*simdata->params.dx;
-
-  sim_grid.numnodesx =
-      MAX(floor((sim_grid.xmax - sim_grid.xmin) / simdata->params.dx), 1);
-  sim_grid.numnodesy =
-      MAX(floor((sim_grid.ymax - sim_grid.ymin) / simdata->params.dx), 1);
-  sim_grid.numnodesz =
-      MAX(floor((sim_grid.zmax - sim_grid.zmin) / simdata->params.dx), 1);
+  
+  sim_grid.numnodesx = size_direction[0];
+  sim_grid.numnodesy = size_direction[3];
+  sim_grid.numnodesz = size_direction[6];
 
   if (interpolate_inputmaps(simdata, &sim_grid, c_map, rho_map) != 0) {
     printf(
@@ -1619,40 +1611,59 @@ void init_simulation(simulation_data_t *simdata, const char *params_filename, pr
     fprintf(stderr, "Error: Memory allocation for process failed!\n");
     MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
   }
-  process->px_bdy[0] = malloc(sizeof(double)*(size_direction[3]*size_direction[6]+size_direction[3]));
-  process->px_bdy[1] = malloc(sizeof(double)*(size_direction[3]*size_direction[6]+size_direction[3]));
-  process->py_bdy[0] = malloc(sizeof(double)*(size_direction[0]*size_direction[6]+size_direction[0]));
-  process->py_bdy[1] = malloc(sizeof(double)*(size_direction[0]*size_direction[6]+size_direction[0]));
-  process->pz_bdy[0] = malloc(sizeof(double)*(size_direction[0]*size_direction[3]+size_direction[0]));
-  process->pz_bdy[1] = malloc(sizeof(double)*(size_direction[0]*size_direction[3]+size_direction[0]));
-  process->vx_bdy[0] = malloc(sizeof(double)*(size_direction[3]*size_direction[6]+size_direction[3]));
-  process->vx_bdy[1] = malloc(sizeof(double)*(size_direction[3]*size_direction[6]+size_direction[3]));
-  process->vy_bdy[0] = malloc(sizeof(double)*(size_direction[0]*size_direction[6]+size_direction[0]));
-  process->vy_bdy[1] = malloc(sizeof(double)*(size_direction[0]*size_direction[6]+size_direction[0]));
-  process->vz_bdy[0] = malloc(sizeof(double)*(size_direction[0]*size_direction[3]+size_direction[0]));
-  process->vz_bdy[1] = malloc(sizeof(double)*(size_direction[0]*size_direction[3]+size_direction[0]));
+  process->px_bdy[0] = malloc(sizeof(double)*size_direction[3]*size_direction[6]);
+  process->px_bdy[1] = malloc(sizeof(double)*size_direction[3]*size_direction[6]);
+  process->vx_bdy[0] = malloc(sizeof(double)*size_direction[3]*size_direction[6]);
+  process->vx_bdy[1] = malloc(sizeof(double)*size_direction[3]*size_direction[6]);
+  process->py_bdy[0] = malloc(sizeof(double)*size_direction[0]*size_direction[6]);
+  process->vy_bdy[0] = malloc(sizeof(double)*size_direction[0]*size_direction[6]);
+  process->vy_bdy[1] = malloc(sizeof(double)*size_direction[0]*size_direction[6]);
+  process->py_bdy[1] = malloc(sizeof(double)*size_direction[0]*size_direction[6]);
+  process->pz_bdy[0] = malloc(sizeof(double)*size_direction[0]*size_direction[3]);
+  process->pz_bdy[1] = malloc(sizeof(double)*size_direction[0]*size_direction[3]);
+  process->vz_bdy[0] = malloc(sizeof(double)*size_direction[0]*size_direction[3]);
+  process->vz_bdy[1] = malloc(sizeof(double)*size_direction[0]*size_direction[3]);
   if(!(process->px_bdy[0])||!(process->px_bdy[1])||!(process->py_bdy[0])||!(process->py_bdy[1])||!(process->pz_bdy[0])||!(process->pz_bdy[1])||!(process->vx_bdy[0])||!(process->vx_bdy[1])||!(process->vy_bdy[0])||!(process->vy_bdy[1])||!(process->vz_bdy[0])||!(process->vz_bdy[1]))
   {
     fprintf(stderr, "Error: Memory allocation for process failed!\n");
     MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
   }
 
-  // Initialize the boundary values at the beginning of the simulation
-  process->px_bdy[0][0] = 0;
-  process->py_bdy[0][0] = 0;
-  process->pz_bdy[0][0] = 0;
-  process->vx_bdy[0][0] = 0;
-  process->vy_bdy[0][0] = 0;
-  process->vz_bdy[0][0] = 0;
+  for(int p = 0; p < size_direction[6]; ++p)
+  {
+    for(int n = 0; n < size_direction[3]; ++n)
+    {
+      int k = p*size_direction[3] + n;
+      process->px_bdy[0][k] = 0;
+      process->px_bdy[1][k] = 0;
+      process->vx_bdy[0][k] = 0;
+      process->vx_bdy[1][k] = 0;
+    } 
+  }
 
-  process->px_bdy[1][0] = 0;
-  process->py_bdy[1][0] = 0;
-  process->pz_bdy[1][0] = 0;
-  process->vx_bdy[1][0] = 0;
-  process->vy_bdy[1][0] = 0;
-  process->vz_bdy[1][0] = 0;
+  for(int n = 0; n < size_direction[3]; ++n)
+  {
+    for(int m = 0; m < size_direction[0]; ++m)
+    {
+      int k = n*size_direction[0] + m;
+      process->pz_bdy[0][k] = 0;
+      process->pz_bdy[1][k] = 0;
+      process->vz_bdy[0][k] = 0;
+      process->vz_bdy[1][k] = 0;
+    } 
+  }
 
-
+  for(int p = 0; p < size_direction[6]; ++p)
+  {
+    for(int m = 0; m < size_direction[0]; ++m)
+    {
+      int k = p*size_direction[0] + m;
+      process->py_bdy[0][k] = 0;
+      process->py_bdy[1][k] = 0;
+      process->vy_bdy[0][k] = 0;
+      process->vy_bdy[1][k] = 0;
+    } 
+  }
 
   if(process->world_rank == 0)
   {
@@ -1665,8 +1676,7 @@ void init_simulation(simulation_data_t *simdata, const char *params_filename, pr
     printf(" Maximum time: %g\n\n", simdata->params.maxt);
 
     if (simdata->params.outrate > 0 && simdata->params.outputs) {
-      int outsampling =
-          (int)(1.0 / (simdata->params.outrate * simdata->params.dt));
+      int outsampling = (int)(1.0 / (simdata->params.outrate * simdata->params.dt));
 
       printf("     Output rate: every %d step(s)\n", simdata->params.outrate);
       printf(" Output sampling: %d Hz\n\n", outsampling);
@@ -1696,16 +1706,17 @@ void init_simulation(simulation_data_t *simdata, const char *params_filename, pr
   free(c_map);
 }
 
-void finalize_simulation(simulation_data_t *simdata) {
+void finalize_simulation(simulation_data_t *simdata, process_s *process) {
   if (simdata->params.outputs != NULL) {
-    for (int i = 0; i < simdata->params.numoutputs; i++) {
-      free(simdata->params.outputs[i].filename);
+    if(process->world_rank == 0){
+      for (int i = 0; i < simdata->params.numoutputs; i++) {
+        free(simdata->params.outputs[i].filename);
 
-      if (simdata->params.outrate > 0) {
-        fclose(simdata->params.outputs[i].fp);
+        if (simdata->params.outrate > 0) {
+          fclose(simdata->params.outputs[i].fp);
+        }
       }
     }
-
     free(simdata->params.outputs);
   }
 
@@ -1719,12 +1730,14 @@ void finalize_simulation(simulation_data_t *simdata) {
   free(simdata->rhohalf);
   free(simdata->c->vals);
   free(simdata->c);
-
+  printf("OK d\n");
+  fflush(stdout);
   free(simdata->pold->vals);
   free(simdata->pold);
   free(simdata->pnew->vals);
   free(simdata->pnew);
-
+  printf("OK e\n");
+  fflush(stdout);
   free(simdata->vxold->vals);
   free(simdata->vxold);
   free(simdata->vxnew->vals);
@@ -1737,6 +1750,8 @@ void finalize_simulation(simulation_data_t *simdata) {
   free(simdata->vzold);
   free(simdata->vznew->vals);
   free(simdata->vznew);
+  printf("OK f\n");
+  fflush(stdout);
 }
 
 void swap_timesteps(simulation_data_t *simdata) {

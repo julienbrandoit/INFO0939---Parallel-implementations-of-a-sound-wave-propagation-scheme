@@ -507,7 +507,7 @@ void init_simulation(simulation_data_t *simdata, const char *params_filename, pr
  * @param simdata [INOUT] a simulation data object describing the simulation to
  * finalize
  */
-void finalize_simulation(simulation_data_t *simdata);
+void finalize_simulation(simulation_data_t *simdata, process_s *process);
 
 /**
  * @brief Swap the time steps data, i.e., make the new time step the old one
