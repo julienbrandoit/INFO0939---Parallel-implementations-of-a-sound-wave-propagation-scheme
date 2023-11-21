@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name="MPI please work ?"
-#SBATCH --ntasks=8
+#SBATCH --ntasks=16
 #SBATCH --cpus-per-task=1
 #SBATCH --time=05:00
 #SBATCH --output=mpi_out.out
@@ -9,5 +9,5 @@ module load OpenMPI
 
 mpicc fdtd_mpi.c -o bin/fdtd_mpi -lm
 cd ./example_inputs/simple3d
-srun ../../bin/fdtd_mpi param_3d.txt 2 2 2
+srun ../../bin/fdtd_mpi param_3d.txt
 cd ../..

@@ -6,7 +6,7 @@
 #include "fdtd_mpi.h"
 #include <mpi.h>
 
-void init_world(world_s **world, int dims[3], int periods[3], int reorder)
+void init_world(world_s **world)
 {
   // Allocation of memory for world
   *world = malloc(sizeof(world_s));
@@ -17,22 +17,18 @@ void init_world(world_s **world, int dims[3], int periods[3], int reorder)
   }
 
   // Initialization of world parameters for the cartesian communication grid
-  ((*world)->dims)[0] = dims[0]; 
-  ((*world)->dims)[1] = dims[1];
-  ((*world)->dims)[2] = dims[2];
-  
-  ((*world)->periods)[0] = periods[0];
-  ((*world)->periods)[1] = periods[1];
-  ((*world)->periods)[2] = periods[2];
+  ((*world)->dims)[0] = 0; 
+  ((*world)->dims)[1] = 0;
+  ((*world)->dims)[2] = 0;
 
-  (*world)->reorder = reorder;
+  (*world)->reorder = 0;
 
   // Recuperation of the world size
   MPI_Comm_size(MPI_COMM_WORLD, &((*world)->world_size));
   
   // Creation of the cartesian communication grid
-  MPI_Dims_create((*world)->world_size, 3, dims);
-  MPI_Cart_create(MPI_COMM_WORLD, 3, dims, periods, reorder, &((*world)->cart_comm));
+  MPI_Dims_create((*world)->world_size, 3, (*world)->dims);
+  MPI_Cart_create(MPI_COMM_WORLD, 3, (*world)->dims, (int[]){0,0,0}, 0, &((*world)->cart_comm));
  
   // Recuperation of the world rank
   int rank;
@@ -43,7 +39,7 @@ void init_world(world_s **world, int dims[3], int periods[3], int reorder)
   {
     printf("\n");
     printf("== WORLD CREATION (mpi implementation) ==\n");
-    printf("  (P_x, P_y, P_z) = (%d, %d, %d)\n", dims[0], dims[1], dims[2]); 
+    printf("  (P_x, P_y, P_z) = (%d, %d, %d)\n", (*world)->dims[0], (*world)->dims[1], (*world)->dims[2]); 
     printf("  World size : %d\n", (*world)->world_size);
     printf("== PROCESSES CREATION (mpi implementation) == \n");
     fflush(stdout);
@@ -185,25 +181,17 @@ void sort_subgrid_to_grid(double *sub_table, int* counts, double *total_table, w
 
 int main(int argc, char *argv[]) {
 
-  int P_x = atoi(argv[2]); 
-  int P_y = atoi(argv[3]);
-  int P_z = atoi(argv[4]);
-
-  int dims[3] = {P_x, P_y, P_z};
-  int periods[3] = {0,0,0};
-  int reorder = 0;
-
   /*INIT MPI*/
   MPI_Init(&argc, &argv);
 
-  if (argc < 5) {
-      printf("\nUsage: mpirun -np N ./fdtd <param_file> <Px> <Py> <Pz>\n\n");
+  if (argc < 2) {
+      printf("\nUsage: mpirun -np N ./fdtd <param_file>\n\n");
       MPI_Finalize();
       exit(1);
   }
 
   world_s *my_world;
-  init_world(&my_world, dims, periods, reorder);
+  init_world(&my_world);
   process_s *my_process;
   init_process(&my_process, my_world);
 
