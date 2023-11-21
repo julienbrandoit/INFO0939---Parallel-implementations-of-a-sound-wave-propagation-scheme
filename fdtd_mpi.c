@@ -345,7 +345,7 @@ int main(int argc, char *argv[]) {
 
   if (my_process->world_rank == 0) {
     double elapsed = GET_TIME() - start;
-    double numupdates = (double)NUMNODESTOT(simdata.pold->grid) * (numtimesteps + 1);
+    double numupdates = (double)NUMNODESTOT(my_world->world_grid) * (numtimesteps + 1);
     double updatespers = numupdates / elapsed / 1e6;
 
     printf("\nElapsed %.6lf seconds (%.3lf Mupdates/s)\n\n", elapsed, updatespers);
