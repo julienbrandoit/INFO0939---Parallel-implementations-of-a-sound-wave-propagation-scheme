@@ -218,8 +218,6 @@ typedef struct world {
   MPI_Comm cart_comm;
 
   int dims[3];
-  int periods[3];
-  int reorder;
 
   grid_t world_grid; 
 

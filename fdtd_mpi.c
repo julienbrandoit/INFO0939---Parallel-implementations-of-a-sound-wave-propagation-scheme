@@ -21,8 +21,6 @@ void init_world(world_s **world)
   ((*world)->dims)[1] = 0;
   ((*world)->dims)[2] = 0;
 
-  (*world)->reorder = 0;
-
   // Recuperation of the world size
   MPI_Comm_size(MPI_COMM_WORLD, &((*world)->world_size));
   
@@ -155,6 +153,7 @@ void size_process(int coord[3], world_s *world, int table[3*3])
 
 void sort_subgrid_to_grid(double *sub_table, int* counts, double *total_table, world_s *world)
 {
+  int offset = 0;
   for(int r = 0; r < world->world_size; ++r)
   {
     int coord[3];
@@ -172,10 +171,11 @@ void sort_subgrid_to_grid(double *sub_table, int* counts, double *total_table, w
           int m_world = m + table[1];
           int n_world = n + table[4];
           int p_world = p + table[7];
-          total_table[INDEX3D(world->world_grid, m_world, n_world, p_world)] = sub_table[table[3] * table[0] * p + table[0] * n + m];
+          total_table[INDEX3D(world->world_grid, m_world, n_world, p_world)] = sub_table[table[3] * table[0] * p + table[0] * n + m + offset];
         }
       }
     }
+    offset += counts[r];
   }
 }
 
