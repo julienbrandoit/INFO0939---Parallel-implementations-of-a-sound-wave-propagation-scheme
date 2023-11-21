@@ -1193,7 +1193,6 @@ void update_pressure(simulation_data_t *simdata, process_s *process) {
   size_process(process->coords, process->world, size_direction);
 
   int m = numnodesx - 1;
-  /*HERE,p=0 and n =0, not well done because we have to get the value in the bdy, not say that this is 0 (0 only for the 'real bdy' of the domain)*/
   for (int p = 0; p < numnodesz; p++) {
     for (int n = 0; n < numnodesy; n++) {
         double rhoc2dtdx = GETVALUE(simdata->rho, m, n, p) *
@@ -1203,9 +1202,29 @@ void update_pressure(simulation_data_t *simdata, process_s *process) {
         double dvy = GETVALUE(simdata->vyold, m, n, p);
         double dvz = GETVALUE(simdata->vzold, m, n, p);
 
-        dvx -= m > 0 ? GETVALUE(simdata->vxold, m - 1, n, p) : 0.0;
-        dvy -= n > 0 ? GETVALUE(simdata->vyold, m, n - 1, p) : 0.0;
-        dvz -= p > 0 ? GETVALUE(simdata->vzold, m, n, p - 1) : 0.0;
+        if(m == 0)
+        {
+          dvx -= process->neighbors[LEFT] >= 0 ? process->vx_bdy[1][p*numnodesy + n] : 0;
+        }else
+        {
+          dvx -= GETVALUE(simdata->vxold, m - 1, n, p);
+        }
+
+        if(n == 0)
+        {
+          dvy -= process->neighbors[DOWN] >= 0 ? process->vy_bdy[1][p*numnodesx + m] : 0;
+        }else
+        {
+          dvy -= GETVALUE(simdata->vyold, m, n - 1, p);
+        }
+
+        if(p == 0)
+        {
+          dvz -= process->neighbors[BACKWARD] >= 0 ? process->vz_bdy[1][n*numnodesx + m] : 0;
+        }else
+        {
+          dvy -= GETVALUE(simdata->vzold, m, n, p - 1);
+        }
 
         double value = GETVALUE(simdata->pold, m, n, p) - rhoc2dtdx * (dvx + dvy + dvz);
 
@@ -1214,8 +1233,8 @@ void update_pressure(simulation_data_t *simdata, process_s *process) {
     }
   }
   MPI_Isend(process->px_bdy[0], numnodesy*numnodesz, MPI_DOUBLE, process->neighbors[LEFT], 0, process->world->cart_comm, &requestx_p);
+
   int n = numnodesy - 1;
-  /*HERE,p=0 and m =0, not well done because we have to get the value in the bdy, not say that this is 0 (0 only for the 'real bdy' of the domain)*/
   for (int p = 0; p < numnodesz; p++) {
     for (int m = 0; m < numnodesx; m++) {
         double rhoc2dtdx = GETVALUE(simdata->rho, m, n, p) *
@@ -1225,9 +1244,29 @@ void update_pressure(simulation_data_t *simdata, process_s *process) {
         double dvy = GETVALUE(simdata->vyold, m, n, p);
         double dvz = GETVALUE(simdata->vzold, m, n, p);
 
-        dvx -= m > 0 ? GETVALUE(simdata->vxold, m - 1, n, p) : 0.0;
-        dvy -= n > 0 ? GETVALUE(simdata->vyold, m, n - 1, p) : 0.0;
-        dvz -= p > 0 ? GETVALUE(simdata->vzold, m, n, p - 1) : 0.0;
+        if(m == 0)
+        {
+          dvx -= process->neighbors[LEFT] >= 0 ? process->vx_bdy[1][p*numnodesy + n] : 0;
+        }else
+        {
+          dvx -= GETVALUE(simdata->vxold, m - 1, n, p);
+        }
+
+        if(n == 0)
+        {
+          dvy -= process->neighbors[DOWN] >= 0 ? process->vy_bdy[1][p*numnodesx + m] : 0;
+        }else
+        {
+          dvy -= GETVALUE(simdata->vyold, m, n - 1, p);
+        }
+
+        if(p == 0)
+        {
+          dvz -= process->neighbors[BACKWARD] >= 0 ? process->vz_bdy[1][n*numnodesx + m] : 0;
+        }else
+        {
+          dvy -= GETVALUE(simdata->vzold, m, n, p - 1);
+        }
 
         double value = GETVALUE(simdata->pold, m, n, p) - rhoc2dtdx * (dvx + dvy + dvz);
 
@@ -1236,8 +1275,8 @@ void update_pressure(simulation_data_t *simdata, process_s *process) {
     }
   }
   MPI_Isend(process->py_bdy[0], numnodesx*numnodesz, MPI_DOUBLE, process->neighbors[DOWN], 1, process->world->cart_comm, &requesty_p);
+  
   int p = numnodesz - 1;
-  /*HERE,n=0 and m =0, not well done because we have to get the value in the bdy, not say that this is 0 (0 only for the 'real bdy' of the domain)*/
   for (int n = 0; n < numnodesy; n++) {
     for (int m = 0; m < numnodesx; m++) {
         double rhoc2dtdx = GETVALUE(simdata->rho, m, n, p) *
@@ -1247,9 +1286,29 @@ void update_pressure(simulation_data_t *simdata, process_s *process) {
         double dvy = GETVALUE(simdata->vyold, m, n, p);
         double dvz = GETVALUE(simdata->vzold, m, n, p);
 
-        dvx -= m > 0 ? GETVALUE(simdata->vxold, m - 1, n, p) : 0.0;
-        dvy -= n > 0 ? GETVALUE(simdata->vyold, m, n - 1, p) : 0.0;
-        dvz -= p > 0 ? GETVALUE(simdata->vzold, m, n, p - 1) : 0.0;
+        if(m == 0)
+        {
+          dvx -= process->neighbors[LEFT] >= 0 ? process->vx_bdy[1][p*numnodesy + n] : 0;
+        }else
+        {
+          dvx -= GETVALUE(simdata->vxold, m - 1, n, p);
+        }
+
+        if(n == 0)
+        {
+          dvy -= process->neighbors[DOWN] >= 0 ? process->vy_bdy[1][p*numnodesx + m] : 0;
+        }else
+        {
+          dvy -= GETVALUE(simdata->vyold, m, n - 1, p);
+        }
+
+        if(p == 0)
+        {
+          dvz -= process->neighbors[BACKWARD] >= 0 ? process->vz_bdy[1][n*numnodesx + m] : 0;
+        }else
+        {
+          dvy -= GETVALUE(simdata->vzold, m, n, p - 1);
+        }
 
         double value = GETVALUE(simdata->pold, m, n, p) - rhoc2dtdx * (dvx + dvy + dvz);
 
