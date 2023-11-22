@@ -9,5 +9,5 @@ module load OpenMPI
 
 mpicc fdtd_mpi.c -o fdtd_mpi -lm
 cd ./example_inputs/simple3d
-mpirun -np 3 ../../fdtd_mpi param_3d.txt 3 1 1 
+mpirun -np 3 ../../fdtd_mpi param_3d.txt 
 cd ../..
