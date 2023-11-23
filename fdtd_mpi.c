@@ -13,7 +13,7 @@ void init_world(world_s **world)
   if(!(*world))
   {
     fprintf(stderr, "Error: Memory allocation for world failed \n");
-    MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE); // Arrête tous les processus MPI.
+    MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE); // Stop all MPI process.
   }
 
   // Initialization of world parameters for the cartesian communication grid
@@ -1124,12 +1124,31 @@ void apply_source(simulation_data_t *simdata, int step) {
   double posx = source->posx;
   double posy = source->posy;
   double posz = source->posz;
+  if(step == 0){
+    printf("posx = %g, posy = %g, posz = %g\n", posx, posy, posz);
+    printf("xmin = %g, xmax = %g, y_min = %g, y_max = %g, z_min = %g, z_max = %g\n", simdata->pold->grid.xmin, simdata->pold->grid.xmax, simdata->pold->grid.ymin, simdata->pold->grid.ymax, simdata->pold->grid.zmin, simdata->pold->grid.zmax);
+    fflush(stdout);
+  }
+  
+  if (posx < simdata->pold->grid.xmin || posx > simdata->pold->grid.xmax ||
+      posy < simdata->pold->grid.ymin || posy > simdata->pold->grid.ymax ||
+      posz < simdata->pold->grid.zmin || posz > simdata->pold->grid.zmax) {
+      if(step == 0){
+        printf("Invalid source position (%g, %g, %g)\n", posx, posy, posz);
+        fflush(stdout);
+      }
+    return;
+  }
 
   double t = step * simdata->params.dt;
-
   int m, n, p;
-  closest_index(&simdata->pold->grid, posx, posy, posz, &m, &n, &p);
 
+  closest_index(&simdata->pold->grid, posx, posy, posz, &m, &n, &p);
+  if(step == 0){
+    printf("m = %d, n = %d, p = %d\n", m, n, p);
+    fflush(stdout);
+  }
+  
   if (source->type == SINE) {
     double freq = source->data[0];
 
@@ -1190,13 +1209,8 @@ void update_pressure(simulation_data_t *simdata, process_s *process) {
         double dvy = GETVALUE(simdata->vyold, m, n, p);
         double dvz = GETVALUE(simdata->vzold, m, n, p);
 
-        if(m == 0)
-        {
-          dvx -= process->neighbors[LEFT] >= 0 ? process->vx_bdy[1][p*numnodesy + n] : 0;
-        }else
-        {
-          dvx -= GETVALUE(simdata->vxold, m - 1, n, p);
-        }
+        
+        dvx -= GETVALUE(simdata->vxold, m - 1, n, p);
 
         if(n == 0)
         {
@@ -1240,13 +1254,8 @@ void update_pressure(simulation_data_t *simdata, process_s *process) {
           dvx -= GETVALUE(simdata->vxold, m - 1, n, p);
         }
 
-        if(n == 0)
-        {
-          dvy -= process->neighbors[DOWN] >= 0 ? process->vy_bdy[1][p*numnodesx + m] : 0;
-        }else
-        {
-          dvy -= GETVALUE(simdata->vyold, m, n - 1, p);
-        }
+         
+        dvy -= GETVALUE(simdata->vyold, m, n - 1, p);
 
         if(p == 0)
         {
@@ -1290,13 +1299,8 @@ void update_pressure(simulation_data_t *simdata, process_s *process) {
           dvy -= GETVALUE(simdata->vyold, m, n - 1, p);
         }
 
-        if(p == 0)
-        {
-          dvz -= process->neighbors[BACKWARD] >= 0 ? process->vz_bdy[1][n*numnodesx + m] : 0;
-        }else
-        {
-          dvy -= GETVALUE(simdata->vzold, m, n, p - 1);
-        }
+        
+        dvy -= GETVALUE(simdata->vzold, m, n, p - 1);
 
         double value = GETVALUE(simdata->pold, m, n, p) - rhoc2dtdx * (dvx + dvy + dvz);
 
@@ -1365,21 +1369,21 @@ void update_velocities(simulation_data_t *simdata, process_s *process) {
 
         if(m == numnodesx - 1)
         {
-          dpx = process->neighbors[RIGHT] >= 0 ? process->px_bdy[1][p*numnodesy+n] : 0;
+          dpx = process->neighbors[RIGHT] >= 0 ? process->px_bdy[1][p*numnodesy+n] - p_mnq: -p_mnq;
         }else
         {
           dpx = GETVALUE(simdata->pnew, m+1, n, p) - p_mnq;
         }
         if(n == numnodesy - 1)
         {
-          dpy = process->neighbors[UP] >= 0 ? process->py_bdy[1][p*numnodesx+m] : 0;
+          dpy = process->neighbors[UP] >= 0 ? process->py_bdy[1][p*numnodesx+m] -p_mnq: -p_mnq;
         }else
         {
           dpy = GETVALUE(simdata->pnew, m, n+1, p) - p_mnq;
         }
         if(p == numnodesz - 1)
         {
-          dpz = process->neighbors[FORWARD] >= 0 ? process->pz_bdy[1][n*numnodesx+m] : 0;
+          dpz = process->neighbors[FORWARD] >= 0 ? process->pz_bdy[1][n*numnodesx+m] -p_mnq: -p_mnq;
         }else
         {
           dpz = GETVALUE(simdata->pnew, m, n, p+1) - p_mnq;
