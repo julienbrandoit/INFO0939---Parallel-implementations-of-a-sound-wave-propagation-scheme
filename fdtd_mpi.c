@@ -201,10 +201,8 @@ int main(int argc, char *argv[]) {
   simulation_data_t simdata;
   init_simulation(&simdata, argv[1], my_process);
 
-  MPI_Barrier(my_world->cart_comm);
-  // Garantee that all things that have been written in the stdout are send to the out before starting the timer
-  fflush(stdout);
-  MPI_Barrier(my_world->cart_comm);
+  int my_size[9];
+  size_process(my_process->coords, my_world, my_size);
 
   printf("Process %d : init ok, starting computation ...\n", my_process->world_rank);
   fflush(stdout);
@@ -214,15 +212,17 @@ int main(int argc, char *argv[]) {
 
   double start = GET_TIME();
   for (int tstep = 0; tstep <= numtimesteps; tstep++) {
-    apply_source(&simdata, tstep);
+    if (simdata.params.source.posx >= simdata.params.dx * my_size[1] && simdata.params.source.posx < simdata.params.dx * my_size[2] &&
+        simdata.params.source.posy >= simdata.params.dx * my_size[4] && simdata.params.source.posy < simdata.params.dx * my_size[5] &&
+        simdata.params.source.posz >= simdata.params.dx * my_size[7] && simdata.params.source.posz < simdata.params.dx * my_size[8])
+    {
+      apply_source(&simdata, tstep);
+    }
     if (simdata.params.outrate > 0 && (tstep % simdata.params.outrate) == 0) {
       double* tmpbuf = NULL;
       int*    counts = NULL;
       int*    displs = NULL;
-      
-      int my_size[9];
-      size_process(my_process->coords, my_world, my_size);
-
+        
       if (my_process->world_rank == 0) {
         int size = my_world->world_grid.numnodesx * my_world->world_grid.numnodesy * my_world->world_grid.numnodesz;
         tmpbuf = (double*)malloc(sizeof(double)*size); 
@@ -234,7 +234,6 @@ int main(int argc, char *argv[]) {
           fprintf(stderr, "Error: Memory allocation for tmpbuf, counts or displs failed!\n");
           MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
         }
-
         for (int rank = 0; rank < my_world->world_size; rank++) {
           int rank_size[9];
           int rank_coords[3];
@@ -1124,39 +1123,16 @@ void apply_source(simulation_data_t *simdata, int step) {
   double posx = source->posx;
   double posy = source->posy;
   double posz = source->posz;
-  if(step == 0){
-    printf("posx = %g, posy = %g, posz = %g\n", posx, posy, posz);
-    printf("xmin = %g, xmax = %g, y_min = %g, y_max = %g, z_min = %g, z_max = %g\n", simdata->pold->grid.xmin, simdata->pold->grid.xmax, simdata->pold->grid.ymin, simdata->pold->grid.ymax, simdata->pold->grid.zmin, simdata->pold->grid.zmax);
-    fflush(stdout);
-  }
-  
-  if (posx < simdata->pold->grid.xmin || posx > simdata->pold->grid.xmax ||
-      posy < simdata->pold->grid.ymin || posy > simdata->pold->grid.ymax ||
-      posz < simdata->pold->grid.zmin || posz > simdata->pold->grid.zmax) {
-      if(step == 0){
-        printf("Invalid source position (%g, %g, %g)\n", posx, posy, posz);
-        fflush(stdout);
-      }
-    return;
-  }
   
   double t = step * simdata->params.dt;
   int m, n, p;
 
-  closest_index(&simdata->pold->grid, posx, posy, posz, &m, &n, &p);
-  if(step == 0){
-    printf("m = %d, n = %d, p = %d, x_min = %g\n", m, n, p, simdata->pold->grid.xmin);
-    fflush(stdout);
-  }
-  
+  closest_index(&simdata->pold->grid, posx, posy, posz, &m, &n, &p);  
   if (source->type == SINE) {
     double freq = source->data[0];
-
     SETVALUE(simdata->pold, m, n, p, sin(2 * M_PI * freq * t));
-
   } else if (source->type == AUDIO) {
     int sample = MIN((int)(t * source->sampling), source->numsamples);
-
     SETVALUE(simdata->pold, m, n, p, simdata->params.source.data[sample]);
   }
 }
