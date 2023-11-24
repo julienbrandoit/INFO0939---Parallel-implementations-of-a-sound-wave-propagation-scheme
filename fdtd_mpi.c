@@ -1139,13 +1139,13 @@ void apply_source(simulation_data_t *simdata, int step) {
       }
     return;
   }
-
+  
   double t = step * simdata->params.dt;
   int m, n, p;
 
   closest_index(&simdata->pold->grid, posx, posy, posz, &m, &n, &p);
   if(step == 0){
-    printf("m = %d, n = %d, p = %d\n", m, n, p);
+    printf("m = %d, n = %d, p = %d, x_min = %g\n", m, n, p, simdata->pold->grid.xmin);
     fflush(stdout);
   }
   
