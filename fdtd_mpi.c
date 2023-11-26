@@ -1201,7 +1201,7 @@ void update_pressure(simulation_data_t *simdata, process_s *process) {
           dvz -= process->neighbors[BACKWARD] >= 0 ? process->vz_bdy[1][n*numnodesx + m] : 0;
         }else
         {
-          dvy -= GETVALUE(simdata->vzold, m, n, p - 1);
+          dvz -= GETVALUE(simdata->vzold, m, n, p - 1);
         }
 
         double value = GETVALUE(simdata->pold, m, n, p) - rhoc2dtdx * (dvx + dvy + dvz);
@@ -1238,7 +1238,7 @@ void update_pressure(simulation_data_t *simdata, process_s *process) {
           dvz -= process->neighbors[BACKWARD] >= 0 ? process->vz_bdy[1][n*numnodesx + m] : 0;
         }else
         {
-          dvy -= GETVALUE(simdata->vzold, m, n, p - 1);
+          dvz -= GETVALUE(simdata->vzold, m, n, p - 1);
         }
 
         double value = GETVALUE(simdata->pold, m, n, p) - rhoc2dtdx * (dvx + dvy + dvz);
@@ -1276,7 +1276,7 @@ void update_pressure(simulation_data_t *simdata, process_s *process) {
         }
 
         
-        dvy -= GETVALUE(simdata->vzold, m, n, p - 1);
+        dvz -= GETVALUE(simdata->vzold, m, n, p - 1);
 
         double value = GETVALUE(simdata->pold, m, n, p) - rhoc2dtdx * (dvx + dvy + dvz);
 
