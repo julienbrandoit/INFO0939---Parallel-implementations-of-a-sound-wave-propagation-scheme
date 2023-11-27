@@ -1292,35 +1292,18 @@ void update_velocities(simulation_data_t *simdata, process_s *process) {
   MPI_Recv(process->py_bdy[1], numnodesx*numnodesz, MPI_DOUBLE, process->neighbors[UP], 1, process->world->cart_comm, MPI_STATUS_IGNORE);
   MPI_Recv(process->pz_bdy[1], numnodesy*numnodesx, MPI_DOUBLE, process->neighbors[FORWARD], 2, process->world->cart_comm, MPI_STATUS_IGNORE);
 
-  for (int p = 0; p < numnodesz; p++) {
-    for (int n = 0; n < numnodesy; n++) {
-      for (int m = 0; m < numnodesx; m++) {
+  int p = numnodesz - 1;
+  for (int n = 0; n < numnodesy - 1; n++) {
+    for (int m = 0; m < numnodesx - 1; m++) {
         double dtdxrho = dtdx / GETVALUE(simdata->rhohalf, m, n, p);
 
         double p_mnq = GETVALUE(simdata->pnew, m, n, p);
         double dpx, dpy, dpz;
 
-        if(m == numnodesx - 1)
-        {
-          dpx = process->neighbors[RIGHT] >= 0 ? process->px_bdy[1][p*numnodesy+n] - p_mnq: -p_mnq;
-        }else
-        {
-          dpx = GETVALUE(simdata->pnew, m+1, n, p) - p_mnq;
-        }
-        if(n == numnodesy - 1)
-        {
-          dpy = process->neighbors[UP] >= 0 ? process->py_bdy[1][p*numnodesx+m] -p_mnq: -p_mnq;
-        }else
-        {
-          dpy = GETVALUE(simdata->pnew, m, n+1, p) - p_mnq;
-        }
-        if(p == numnodesz - 1)
-        {
-          dpz = process->neighbors[FORWARD] >= 0 ? process->pz_bdy[1][n*numnodesx+m] -p_mnq: -p_mnq;
-        }else
-        {
-          dpz = GETVALUE(simdata->pnew, m, n, p+1) - p_mnq;
-        }
+        dpx = GETVALUE(simdata->pnew, m+1, n, p) - p_mnq;
+        dpy = GETVALUE(simdata->pnew, m, n+1, p) - p_mnq;
+        dpz = process->pz_bdy[1][n*numnodesx + m] - p_mnq;
+        
 
         double prev_vx = GETVALUE(simdata->vxold, m, n, p);
         double prev_vy = GETVALUE(simdata->vyold, m, n, p);
@@ -1333,19 +1316,123 @@ void update_velocities(simulation_data_t *simdata, process_s *process) {
         SETVALUE(simdata->vxnew, m, n, p, value_x);
         SETVALUE(simdata->vynew, m, n, p, value_y);
         SETVALUE(simdata->vznew, m, n, p, value_z);
+
+        process->vz_bdy[0][n*numnodesx+m] = value_z;
+    }
+  }
+  int n = numnodesy - 1;
+  for (int p = 0; p < numnodesz - 1; p++) {
+    for (int m = 0; m < numnodesx - 1; m++) {
+        double dtdxrho = dtdx / GETVALUE(simdata->rhohalf, m, n, p);
+
+        double p_mnq = GETVALUE(simdata->pnew, m, n, p);
+        double dpx, dpy, dpz;
+
+        dpx = GETVALUE(simdata->pnew, m+1, n, p) - p_mnq;
+        dpy = process->py_bdy[1][p*numnodesx + m] - p_mnq;
+        dpz = GETVALUE(simdata->pnew, m, n, p+1) - p_mnq;
         
+
+        double prev_vx = GETVALUE(simdata->vxold, m, n, p);
+        double prev_vy = GETVALUE(simdata->vyold, m, n, p);
+        double prev_vz = GETVALUE(simdata->vzold, m, n, p);
+
+        double value_x = prev_vx - dtdxrho * dpx;
+        double value_y = prev_vy - dtdxrho * dpy;
+        double value_z = prev_vz - dtdxrho * dpz;
+        
+        SETVALUE(simdata->vxnew, m, n, p, value_x);
+        SETVALUE(simdata->vynew, m, n, p, value_y);
+        SETVALUE(simdata->vznew, m, n, p, value_z);
+
+        process->vy_bdy[0][p*numnodesx+m] = value_y;
+    }
+  }
+  int m = numnodesx - 1;
+  for (int p = 0; p < numnodesz - 1; p++) {
+    for (int n = 0; n < numnodesy - 1; n++) {
+        double dtdxrho = dtdx / GETVALUE(simdata->rhohalf, m, n, p);
+
+        double p_mnq = GETVALUE(simdata->pnew, m, n, p);
+        double dpx, dpy, dpz;
+
+        dpx = process->px_bdy[1][p*numnodesy + n] - p_mnq;
+        dpy = GETVALUE(simdata->pnew, m, n+1, p) - p_mnq;
+        dpz = GETVALUE(simdata->pnew, m, n, p+1) - p_mnq;
+        
+
+        double prev_vx = GETVALUE(simdata->vxold, m, n, p);
+        double prev_vy = GETVALUE(simdata->vyold, m, n, p);
+        double prev_vz = GETVALUE(simdata->vzold, m, n, p);
+
+        double value_x = prev_vx - dtdxrho * dpx;
+        double value_y = prev_vy - dtdxrho * dpy;
+        double value_z = prev_vz - dtdxrho * dpz;
+        
+        SETVALUE(simdata->vxnew, m, n, p, value_x);
+        SETVALUE(simdata->vynew, m, n, p, value_y);
+        SETVALUE(simdata->vznew, m, n, p, value_z);
+
+        process->vx_bdy[0][p*numnodesy+n] = value_x;
+    }
+  }
+  p = numnodesz - 1;
+  n = numnodesy - 1;
+  for (int m = 0; m < numnodesx; m++) {
+        double dtdxrho = dtdx / GETVALUE(simdata->rhohalf, m, n, p);
+
+        double p_mnq = GETVALUE(simdata->pnew, m, n, p);
+        double dpx, dpy, dpz;
+
         if(m == numnodesx - 1)
-        {
-          process->vx_bdy[0][p*numnodesy+n] = value_x; 
-        }
-        if(n == numnodesy - 1)
-        {
-          process->vy_bdy[0][p*numnodesx+m] = value_y; 
-        }
-        if(p == numnodesz - 1)
-        {
-          process->vz_bdy[0][n*numnodesx+m] = value_z; 
-        }
+            dpx = process->px_bdy[1][p*numnodesy + n] - p_mnq;
+        else
+            dpx = GETVALUE(simdata->pnew, m+1, n, p) - p_mnq;
+        dpy = process->py_bdy[1][p*numnodesx + m] - p_mnq;
+        dpz = process->pz_bdy[1][n*numnodesx + m] - p_mnq;
+        
+
+        double prev_vx = GETVALUE(simdata->vxold, m, n, p);
+        double prev_vy = GETVALUE(simdata->vyold, m, n, p);
+        double prev_vz = GETVALUE(simdata->vzold, m, n, p);
+
+        double value_x = prev_vx - dtdxrho * dpx;
+        double value_y = prev_vy - dtdxrho * dpy;
+        double value_z = prev_vz - dtdxrho * dpz;
+        
+        SETVALUE(simdata->vxnew, m, n, p, value_x);
+        SETVALUE(simdata->vynew, m, n, p, value_y);
+        SETVALUE(simdata->vznew, m, n, p, value_z);
+
+        if(m == numnodesx - 1)
+            process->vx_bdy[0][p*numnodesy+n] = value_x;
+        process->vy_bdy[0][p*numnodesx+m] = value_y;
+        process->vz_bdy[0][n*numnodesx+m] = value_z;
+  }
+  for (int p = 0; p < numnodesz - 1; p++) {
+    for (int n = 0; n < numnodesy - 1; n++) {
+      for (int m = 0; m < numnodesx - 1; m++) {
+        double dtdxrho = dtdx / GETVALUE(simdata->rhohalf, m, n, p);
+
+        double p_mnq = GETVALUE(simdata->pnew, m, n, p);
+        double dpx, dpy, dpz;
+
+        dpx = GETVALUE(simdata->pnew, m+1, n, p) - p_mnq;
+        dpy = GETVALUE(simdata->pnew, m, n+1, p) - p_mnq;
+        dpz = GETVALUE(simdata->pnew, m, n, p+1) - p_mnq;
+        
+
+        double prev_vx = GETVALUE(simdata->vxold, m, n, p);
+        double prev_vy = GETVALUE(simdata->vyold, m, n, p);
+        double prev_vz = GETVALUE(simdata->vzold, m, n, p);
+
+        double value_x = prev_vx - dtdxrho * dpx;
+        double value_y = prev_vy - dtdxrho * dpy;
+        double value_z = prev_vz - dtdxrho * dpz;
+        
+        SETVALUE(simdata->vxnew, m, n, p, value_x);
+        SETVALUE(simdata->vynew, m, n, p, value_y);
+        SETVALUE(simdata->vznew, m, n, p, value_z);
       }
     }
   }
