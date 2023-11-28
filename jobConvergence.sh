@@ -11,7 +11,7 @@ gcc -O3 -o fdtd fdtd.c -lm
 
 # List of parameter files
 
-param_files=("convergence4.txt" "convergence5.txt" "convergence6.txt" "convergence7.txt" "convergence8.txt" "convergence9.txt") # Ajoutez vos fichiers ici
+param_files=("convergence3.txt" "convergence4.txt" "convergence5.txt" "convergence6.txt" "convergence7.txt") # Ajoutez vos fichiers ici
 # Loop over each parameter file
 for param_file in "${param_files[@]}"
 do
@@ -21,11 +21,6 @@ do
     # Set output file and output directory names using the extracted number
     output_file="fdtd_serial_${number}.out"
     output_dir="outputs_${number}"
-
-    # Set the SLURM output file name
-    # Note: Ensure that SLURM accepts this dynamic naming within the script
-    # If not, you might need to create separate submission scripts for each job
-    #SBATCH --output=${output_file}
 
     # Run the program
     cd example_inputs/simple3d
