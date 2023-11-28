@@ -205,6 +205,7 @@ const char *output_source_keywords[] = {[PRESSURE] = "pressure",
 
 /*OUR STRUCT*/
 typedef enum {
+  // For the neighbors array
   UP    = 0,
   DOWN  = 1,
   LEFT  = 2,
@@ -214,6 +215,7 @@ typedef enum {
 } neighbor_s;
 
 typedef struct world {
+  // Structure for the world 
   int world_size;
   MPI_Comm cart_comm;
 
@@ -229,6 +231,7 @@ typedef struct world {
 } world_s;
 
 typedef struct process {
+  // Structure for the process (MPI)
   int world_rank;
   int cart_rank;
 

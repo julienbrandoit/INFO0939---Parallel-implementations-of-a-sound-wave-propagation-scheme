@@ -47,6 +47,7 @@ void init_world(world_s **world)
 
 void free_world(world_s *world)
 {
+  // Free the memory allocated for the world structure
   int r;
   MPI_Comm_rank(world->cart_comm , &r);
   if(r == 0)
@@ -128,6 +129,7 @@ void free_process(process_s *process)
 
 void size_process(int coord[3], world_s *world, int table[3*3])
 {
+  // Return the size of the process in the grid of the world and the start and end index 
   int start_p = world->world_grid.numnodesz*coord[2]/(world->dims[2]);
   int end_p = world->world_grid.numnodesz*(coord[2]+1)/world->dims[2];
   
@@ -153,6 +155,7 @@ void size_process(int coord[3], world_s *world, int table[3*3])
 
 void sort_subgrid_to_grid(double *sub_table, int* counts, double *total_table, world_s *world)
 {
+  // Sort the subgrid of each process to the grid of the world for the output
   int offset = 0;
   for(int r = 0; r < world->world_size; ++r)
   {
@@ -212,13 +215,16 @@ int main(int argc, char *argv[]) {
 
   double start = GET_TIME();
   for (int tstep = 0; tstep <= numtimesteps; tstep++) {
+    // Verify if the source is in the subgrid of the process
     if (simdata.params.source.posx >= simdata.params.dx * my_size[1] && simdata.params.source.posx < simdata.params.dx * my_size[2] &&
         simdata.params.source.posy >= simdata.params.dx * my_size[4] && simdata.params.source.posy < simdata.params.dx * my_size[5] &&
         simdata.params.source.posz >= simdata.params.dx * my_size[7] && simdata.params.source.posz < simdata.params.dx * my_size[8])
     {
+      // If yes, apply the source
       apply_source(&simdata, tstep);
     }
     if (simdata.params.outrate > 0 && (tstep % simdata.params.outrate) == 0) {
+      // If the process is the process 0, gather the subgrid of each process and sort it to the grid of the world
       double* tmpbuf = NULL;
       int*    counts = NULL;
       int*    displs = NULL;
@@ -245,6 +251,7 @@ int main(int argc, char *argv[]) {
       }
 
       for (int i = 0; i < simdata.params.numoutputs; i++) {
+        // For each output, gather the subgrid of each process and sort it to the grid of the world
         data_t *output_data = NULL;
         switch (simdata.params.outputs[i].source) {
         case PRESSURE:
@@ -280,6 +287,7 @@ int main(int argc, char *argv[]) {
         }
         if(my_process->world_rank == 0)
         {
+          // If the process is the process 0, write the output
           double time = tstep * simdata.params.dt;
           write_output(&simdata.params.outputs[i], output_data, tstep, time);
         }
@@ -997,6 +1005,7 @@ int read_paramfile(parameters_t *params, const char *filename) {
 
 int interpolate_inputmaps(simulation_data_t *simdata, grid_t *simgrid,
                           data_t *cin, data_t *rhoin) {
+  // Interpolate the input maps (cin and rhoin) to the simulation grid (simgrid)
   if (simdata == NULL || cin == NULL) {
     DEBUG_PRINT("Invalid NULL simdata or cin");
     return 1;
@@ -1012,31 +1021,27 @@ int interpolate_inputmaps(simulation_data_t *simdata, grid_t *simgrid,
   double dx = simdata->params.dx;
   double dxd2 = simdata->params.dx / 2;
 
-  // Boucle sur chaque noeud de la grille de simulation.
-  // Ces boucles itèrent à travers les trois dimensions de la grille.
+ 
   for (int p = 0; p < simgrid->numnodesz; p++) {
     for (int n = 0; n < simgrid->numnodesy; n++) {
       for (int m = 0; m < simgrid->numnodesx; m++) {
         
-        // Calcul des coordonnées réelles (x, y, z) du noeud dans la grille de simulation.
-        // Ces coordonnées sont calculées en multipliant les indices de la grille par l'espacement dx.
+        // Compute the coordinates (x, y, z) of the point of interest in the simulation grid.
         double x = m * dx;
         double y = n * dx;
         double z = p * dx;
 
-        // Trouve les indices les plus proches (mc, nc, pc) dans la grille d'entrée (cin et rhoin).
-        // Ces indices correspondent au point de la grille d'entrée le plus proche des coordonnées (x, y, z).
+        // Find the closest index (mc, nc, pc) of the point of interest in the input grid.
         int mc, nc, pc;
         closest_index(&cin->grid, x, y, z, &mc, &nc, &pc);
 
-        // Gestion des bords de la grille
+        // Clamp the index to the boundaries of the input grid
         mc = MIN(mc, cin->grid.numnodesx - 2);
         nc = MIN(nc, cin->grid.numnodesy - 2);
         pc = MIN(pc, cin->grid.numnodesz - 2);
       
-        // Interpolation trilinéaire
-        // Récupère les valeurs de vitesse du son (c) et de densité (rho) aux huit coins du cube englobant.
-        // Ces coins sont situés autour du point d'intérêt pour l'interpolation.
+        /*INTERPOLATION TRILINEAIRE*/
+        // Recuperation of the values of the speed of sound (c) and density (rho) at the corners of the cube
         double c000 = GETVALUE(cin, mc, nc, pc);
         double c001 = GETVALUE(cin, mc, nc, pc + 1);
         double c010 = GETVALUE(cin, mc, nc + 1, pc);
@@ -1055,14 +1060,12 @@ int interpolate_inputmaps(simulation_data_t *simdata, grid_t *simgrid,
         double rho110 = GETVALUE(rhoin, mc + 1, nc + 1, pc);
         double rho111 = GETVALUE(rhoin, mc + 1, nc + 1, pc + 1);
 
-        // Calcul des facteurs de poids (tx, ty, tz) pour l'interpolation.
-        // Ces facteurs représentent la position relative du point d'intérêt à l'intérieur du cube.
+        // Compute the factors of weight for the interpolation
         double tx = (x - mc * dx) / dx;
         double ty = (y - nc * dx) / dx;
         double tz = (z - pc * dx) / dx;
 
-        // Interpolation trilinéaire de la vitesse du son (c)/densité (rho) au noeud.
-        // Chaque terme de l'interpolation est un produit de la valeur à un coin et des facteurs de poids.
+        // Interpolation of the values of the speed of sound (c) and density (rho) at the point of interest with the trilinear interpolation
         double c_interp = c000 * (1 - tx) * (1 - ty) * (1 - tz) +
                          c001 * (1 - tx) * (1 - ty) * tz +
                          c010 * (1 - tx) * ty * (1 - tz) +
@@ -1090,6 +1093,7 @@ int interpolate_inputmaps(simulation_data_t *simdata, grid_t *simgrid,
         closest_index(&rhoin->grid, x, y, z, &mc, &nc, &pc);
         SETVALUE(simdata->rhohalf, m, n, p, GETVALUE(rhoin, mc, nc, pc));
 
+      /*INTERPOLATION NEAREST NEIGHBOR*/
       /*
         // Nearest-neighbor search
 
@@ -1320,6 +1324,7 @@ void update_velocities(simulation_data_t *simdata, process_s *process) {
         process->vz_bdy[0][n*numnodesx+m] = value_z;
     }
   }
+
   int n = numnodesy - 1;
   for (int p = 0; p < numnodesz - 1; p++) {
     for (int m = 0; m < numnodesx - 1; m++) {
@@ -1348,6 +1353,7 @@ void update_velocities(simulation_data_t *simdata, process_s *process) {
         process->vy_bdy[0][p*numnodesx+m] = value_y;
     }
   }
+
   int m = numnodesx - 1;
   for (int p = 0; p < numnodesz - 1; p++) {
     for (int n = 0; n < numnodesy - 1; n++) {
@@ -1376,6 +1382,7 @@ void update_velocities(simulation_data_t *simdata, process_s *process) {
         process->vx_bdy[0][p*numnodesy+n] = value_x;
     }
   }
+
   p = numnodesz - 1;
   n = numnodesy - 1;
   for (int m = 0; m < numnodesx; m++) {
@@ -1409,6 +1416,7 @@ void update_velocities(simulation_data_t *simdata, process_s *process) {
         process->vy_bdy[0][p*numnodesx+m] = value_y;
         process->vz_bdy[0][n*numnodesx+m] = value_z;
   }
+
   n = numnodesy - 1;
   m = numnodesx - 1;
   for(int p = 0; p < numnodesz; p++){
@@ -1442,6 +1450,7 @@ void update_velocities(simulation_data_t *simdata, process_s *process) {
     process->vx_bdy[0][p*numnodesy+n] = value_x;
     process->vy_bdy[0][p*numnodesx+m] = value_y;
     }
+
   p = numnodesz - 1;
   m = numnodesx - 1;
   for(int n = 0; n < numnodesy; n++){
@@ -1475,6 +1484,7 @@ void update_velocities(simulation_data_t *simdata, process_s *process) {
     process->vx_bdy[0][p*numnodesy+n] = value_x;
     process->vz_bdy[0][n*numnodesx+m] = value_z;
   }
+
   for (int p = 0; p < numnodesz - 1; p++) {
     for (int n = 0; n < numnodesy - 1; n++) {
       for (int m = 0; m < numnodesx - 1; m++) {
@@ -1572,6 +1582,7 @@ void init_simulation(simulation_data_t *simdata, const char *params_filename, pr
   int size_direction[3*3]; //{size m, start m, end m, size n, ... }
   size_process(process->coords, process->world, size_direction);
 
+  // Compute the simulation grid min and max coordinates
   sim_grid.xmin = rhoin_grid.xmin + size_direction[1]*simdata->params.dx;
   sim_grid.xmax = rhoin_grid.xmin + size_direction[2]*simdata->params.dx;
   sim_grid.ymin = rhoin_grid.ymin + size_direction[4]*simdata->params.dx;
@@ -1579,6 +1590,7 @@ void init_simulation(simulation_data_t *simdata, const char *params_filename, pr
   sim_grid.zmin = rhoin_grid.zmin + size_direction[7]*simdata->params.dx;
   sim_grid.zmax = rhoin_grid.zmin + size_direction[8]*simdata->params.dx;
   
+  // Compute the number of nodes in each direction
   sim_grid.numnodesx = size_direction[0];
   sim_grid.numnodesy = size_direction[3];
   sim_grid.numnodesz = size_direction[6];
@@ -1594,7 +1606,7 @@ void init_simulation(simulation_data_t *simdata, const char *params_filename, pr
   }
 
   if(process->world_rank == 0)
-  {
+  { 
     if (simdata->params.outrate > 0 && simdata->params.outputs != NULL) {
       for (int i = 0; i < simdata->params.numoutputs; i++) {
         char *outfilei = simdata->params.outputs[i].filename;
@@ -1620,6 +1632,7 @@ void init_simulation(simulation_data_t *simdata, const char *params_filename, pr
       }
     }
 
+    // Allocate memory for the output grids
     if ((process->world->p_out = allocate_data(&world_grid)) == NULL ||
       (process->world->vx_out = allocate_data(&world_grid)) == NULL ||
       (process->world->vy_out = allocate_data(&world_grid)) == NULL ||
@@ -1628,12 +1641,14 @@ void init_simulation(simulation_data_t *simdata, const char *params_filename, pr
       exit(1);
     }
 
+    // Initialize the output grids to zero
     fill_data(process->world->p_out, 0.0);
     fill_data(process->world->vx_out, 0.0);
     fill_data(process->world->vy_out, 0.0);
     fill_data(process->world->vz_out, 0.0);
   }
 
+  // Allocate memory for the simulation grids
   if ((simdata->pold = allocate_data(&sim_grid)) == NULL ||
       (simdata->pnew = allocate_data(&sim_grid)) == NULL ||
       (simdata->vxold = allocate_data(&sim_grid)) == NULL ||
@@ -1647,6 +1662,7 @@ void init_simulation(simulation_data_t *simdata, const char *params_filename, pr
     exit(1);
   }
 
+  // Initialize the simulation grids to zero
   fill_data(simdata->pold, 0.0);
   fill_data(simdata->pnew, 0.0);
 
@@ -1657,7 +1673,7 @@ void init_simulation(simulation_data_t *simdata, const char *params_filename, pr
   fill_data(simdata->vznew, 0.0);
   fill_data(simdata->vzold, 0.0);
 
-  
+  // Allocate memory for the process boundaries (for MPI communication)
   process->px_bdy = malloc(sizeof(double*)*2);
   process->py_bdy = malloc(sizeof(double*)*2);
   process->pz_bdy = malloc(sizeof(double*)*2);
@@ -1688,6 +1704,7 @@ void init_simulation(simulation_data_t *simdata, const char *params_filename, pr
     MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
   }
 
+  // Initialize the process boundaries to zero
   for(int p = 0; p < size_direction[6]; ++p)
   {
     for(int n = 0; n < size_direction[3]; ++n)
