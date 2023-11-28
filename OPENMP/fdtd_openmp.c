@@ -4,6 +4,7 @@
 #include <time.h>
 
 #include "fdtd_openmp.h"
+#include <omp.h>
 
 int main(int argc, const char *argv[]) {
   if (argc < 2) {
@@ -891,6 +892,7 @@ void update_pressure(simulation_data_t *simdata) {
   We gain a factor of about 5 time faster !!
   */
 
+  #pragma omp parallel for collapse(3)
   for (int p = 0; p < numnodesz; p++) {
     for (int n = 0; n < numnodesy; n++) {
       for (int m = 0; m < numnodesx; m++) {
@@ -936,6 +938,7 @@ void update_velocities(simulation_data_t *simdata) {
   We gain a factor of about 5 time faster !!
   */
 
+  #pragma omp parallel for collapse(3)
   for (int p = 0; p < numnodesz; p++) {
     for (int n = 0; n < numnodesy; n++) {
       for (int m = 0; m < numnodesx; m++) {
