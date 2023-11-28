@@ -1,0 +1,6 @@
+module load Info0939Tools
+module load GCC
+gcc -O3 -o fdtd fdtd.c -lm
+cd example_inputs/simple3d
+../../fdtd convergence5.txt
+cd ../..
