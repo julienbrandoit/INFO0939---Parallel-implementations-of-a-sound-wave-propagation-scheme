@@ -233,7 +233,6 @@ typedef struct world {
 typedef struct process {
   // Structure for the process (MPI)
   int world_rank;
-  int cart_rank;
 
   double **px_bdy;
   double **py_bdy;
@@ -477,20 +476,12 @@ int interpolate_inputmaps(simulation_data_t *simdata, grid_t *simgrid,
                           data_t *cin, data_t *rhoin);
 
 /**
- * @brief Perform the pressure update step
+ * @brief Perform the pressure and velocity update step
  *
  * @param simdata [INOUT] a simulation data object used to get the input and
  * store result of the update step
  */
-void update_pressure(simulation_data_t *simdata, process_s *process);
-
-/**
- * @brief Perform the velocities update step
- *
- * @param simdata [INOUT] a simulation data object used to get the input and
- * store result of the update step
- */
-void update_velocities(simulation_data_t *simdata, process_s *process);
+void update(simulation_data_t *simdata, process_s *process);
 
 /**
  * @brief Initialize the simulation
