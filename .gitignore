@@ -1,6 +1,6 @@
 bin
 example_inputs
-workdir
 *.out
 tools
 run.sh
+out

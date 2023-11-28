@@ -2,17 +2,16 @@
 #SBATCH --job-name="MPI output"
 #SBATCH --ntasks=8
 #SBATCH --cpus-per-task=1
+#SBATCH --mem-per-cpu=4G
 #SBATCH --time=05:00
-#SBATCH --output=mpi_out.out
+#SBATCH --output=out/mpi_out.out
 
 module load OpenMPI
 module load Info0939Tools
 
-mpicc fdtd_mpi.c -o bin/fdtd_mpi -lm
+mpicc MPI/fdtd_mpi.c -o bin/fdtd_mpi -lm -O3
 cd ./example_inputs/simple3d
 srun ../../bin/fdtd_mpi param_3d.txt
-rm cuty.msh
 rm cutx.msh
-rm cutz.msh
 data2gmsh -cutx 0.5 out_p.dat 
 cd ../..
