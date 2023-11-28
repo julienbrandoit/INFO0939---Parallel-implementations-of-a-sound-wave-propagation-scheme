@@ -159,7 +159,7 @@ void sort_subgrid_to_grid(double *sub_table, int* counts, double *total_table, w
 
     int table[9];
     size_process(coord, world, table);
-
+    #pragma omp parallel for collapse(3)
     for(int p = 0; p < table[6]; ++p)
     {
       for(int n = 0; n < table[3]; ++n)
@@ -653,7 +653,8 @@ int write_output(output_t *output, data_t *data, int step, double time) {
   int endp = (type == CUTZ || type == POINT) ? p + 1 : NUMNODESZ(data);
 
   data_t *tmpdata = allocate_data(&output->grid);
-
+  
+  #pragma omp parallel for collapse(3)
   for (m = startm; m < endm; m++) {
     for (n = startn; n < endn; n++) {
       for (p = startp; p < endp; p++) {
@@ -1161,7 +1162,10 @@ void update(simulation_data_t *simdata, process_s *process) {
   int size_direction[3*3];
   size_process(process->coords, process->world, size_direction);
 
+  #pragma parallel
+  {
   int m = 0;
+  #pragma omp for collapse(2) nowait
   for (int p = 0; p < numnodesz; p++) {
     for (int n = 0; n < numnodesy; n++) {
         double rhoc2dtdx = GETVALUE(simdata->rho, m, n, p) *
@@ -1182,9 +1186,9 @@ void update(simulation_data_t *simdata, process_s *process) {
         SETVALUE(simdata->pnew, m, n, p, value);
     }
   }
-  MPI_Isend(process->px_bdy[0], numnodesy*numnodesz, MPI_DOUBLE, process->neighbors[LEFT], 0, process->world->cart_comm, &requestx_p);
 
   int n = 0;
+  #pragma omp for collapse(2) nowait
   for (int p = 0; p < numnodesz; p++) {
     for (int m = 0; m < numnodesx; m++) {
         double rhoc2dtdx = GETVALUE(simdata->rho, m, n, p) *
@@ -1205,9 +1209,9 @@ void update(simulation_data_t *simdata, process_s *process) {
         SETVALUE(simdata->pnew, m, n, p, value);
     }
   }
-  MPI_Isend(process->py_bdy[0], numnodesx*numnodesz, MPI_DOUBLE, process->neighbors[DOWN], 1, process->world->cart_comm, &requesty_p);
   
   int p = 0;
+  #pragma omp for collapse(2) nowait
   for (int n = 0; n < numnodesy; n++) {
     for (int m = 0; m < numnodesx; m++) {
         double rhoc2dtdx = GETVALUE(simdata->rho, m, n, p) *
@@ -1228,8 +1232,16 @@ void update(simulation_data_t *simdata, process_s *process) {
         SETVALUE(simdata->pnew, m, n, p, value);
     }
   }
-  MPI_Isend(process->pz_bdy[0], numnodesy*numnodesx, MPI_DOUBLE, process->neighbors[BACKWARD], 2, process->world->cart_comm, &requestz_p);
 
+  #pragma omp barrier
+  #pragma omp single nowait
+  {
+  MPI_Isend(process->pz_bdy[0], numnodesy*numnodesx, MPI_DOUBLE, process->neighbors[BACKWARD], 2, process->world->cart_comm, &requestz_p);
+  MPI_Isend(process->py_bdy[0], numnodesx*numnodesz, MPI_DOUBLE, process->neighbors[DOWN], 1, process->world->cart_comm, &requesty_p);
+  MPI_Isend(process->px_bdy[0], numnodesy*numnodesz, MPI_DOUBLE, process->neighbors[LEFT], 0, process->world->cart_comm, &requestx_p);
+  }
+
+  #pragma omp for collapse(3)
   for (int p = 1; p < numnodesz; p++) {
     for (int n = 1; n < numnodesy; n++) {
       for (int m = 1; m < numnodesx; m++) {
@@ -1252,7 +1264,7 @@ void update(simulation_data_t *simdata, process_s *process) {
       }
     }
   }
-
+  }
   /*UPDATE VELOCITY*/
 
   MPI_Request request_px;
@@ -1262,7 +1274,9 @@ void update(simulation_data_t *simdata, process_s *process) {
   MPI_Irecv(process->px_bdy[1], numnodesy*numnodesz, MPI_DOUBLE, process->neighbors[RIGHT], 0, process->world->cart_comm, &request_px);
   MPI_Irecv(process->py_bdy[1], numnodesx*numnodesz, MPI_DOUBLE, process->neighbors[UP], 1, process->world->cart_comm, &request_py);
   MPI_Irecv(process->pz_bdy[1], numnodesy*numnodesx, MPI_DOUBLE, process->neighbors[FORWARD], 2, process->world->cart_comm, &request_pz);
-  
+  #pragma omp parallel
+  {
+  #pragma omp for collapse(3) nowait
   for (int p = 0; p < numnodesz - 1; p++) {
     for (int n = 0; n < numnodesy - 1; n++) {
       for (int m = 0; m < numnodesx - 1; m++) {
@@ -1291,11 +1305,14 @@ void update(simulation_data_t *simdata, process_s *process) {
     }
   }
 
+  #pragma omp single
+  {
   MPI_Wait(&request_px, MPI_STATUS_IGNORE);
   MPI_Wait(&request_py, MPI_STATUS_IGNORE);
   MPI_Wait(&request_pz, MPI_STATUS_IGNORE);
-
-  p = numnodesz - 1;
+  }
+  int p = numnodesz - 1;
+  #pragma omp for collapse(2) nowait
   for (int n = 0; n < numnodesy; n++) {
     for (int m = 0; m < numnodesx; m++) {
         double dtdxrho = dtdx / GETVALUE(simdata->rhohalf, m, n, p);
@@ -1330,7 +1347,8 @@ void update(simulation_data_t *simdata, process_s *process) {
     }
   }
 
-  n = numnodesy - 1;
+  int n = numnodesy - 1;
+  #pragma omp for collapse(2) nowait
   for (int p = 0; p < numnodesz; p++) {
     for (int m = 0; m < numnodesx; m++) {
         double dtdxrho = dtdx / GETVALUE(simdata->rhohalf, m, n, p);
@@ -1364,7 +1382,8 @@ void update(simulation_data_t *simdata, process_s *process) {
     }
   }
 
-  m = numnodesx - 1;
+  int m = numnodesx - 1;
+  #pragma omp for collapse(2) nowait
   for (int p = 0; p < numnodesz; p++) {
     for (int n = 0; n < numnodesy; n++) {
         double dtdxrho = dtdx / GETVALUE(simdata->rhohalf, m, n, p);
@@ -1397,6 +1416,7 @@ void update(simulation_data_t *simdata, process_s *process) {
 
         process->vx_bdy[0][p*numnodesy+n] = value_x;
     }
+  }
   }
 }
 

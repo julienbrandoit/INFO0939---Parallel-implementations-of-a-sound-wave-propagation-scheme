@@ -12,6 +12,7 @@ gcc  -fopenmp OPENMP/fdtd_openmp.c -o bin/fdtd_openmp -lm -O3
 cd ./example_inputs/simple3d
 
 export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
+export OMP_PROC_BIND=spread
 
 ./../../bin/fdtd_openmp param_3d.txt
 

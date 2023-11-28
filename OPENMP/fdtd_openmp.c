@@ -397,7 +397,8 @@ int write_output(output_t *output, data_t *data, int step, double time) {
   int endp = (type == CUTZ || type == POINT) ? p + 1 : NUMNODESZ(data);
 
   data_t *tmpdata = allocate_data(&output->grid);
-
+  
+  #pragma omp parallel for collapse(3)
   for (m = startm; m < endm; m++) {
     for (n = startn; n < endn; n++) {
       for (p = startp; p < endp; p++) {
