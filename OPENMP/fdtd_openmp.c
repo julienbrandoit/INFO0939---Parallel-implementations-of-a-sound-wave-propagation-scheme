@@ -893,7 +893,7 @@ void update_pressure(simulation_data_t *simdata) {
   We gain a factor of about 5 time faster !!
   */
 
-  #pragma omp parallel for collapse(3)
+  #pragma omp parallel for collapse(2)
   for (int p = 0; p < numnodesz; p++) {
     for (int n = 0; n < numnodesy; n++) {
       for (int m = 0; m < numnodesx; m++) {
@@ -939,7 +939,7 @@ void update_velocities(simulation_data_t *simdata) {
   We gain a factor of about 5 time faster !!
   */
 
-  #pragma omp parallel for collapse(3)
+  #pragma omp parallel for collapse(2)
   for (int p = 0; p < numnodesz; p++) {
     for (int n = 0; n < numnodesy; n++) {
       for (int m = 0; m < numnodesx; m++) {

@@ -1,0 +1,35 @@
+#!/bin/bash
+#SBATCH --job-name="COMPARE"
+#SBATCH --ntasks=4
+#SBATCH --cpus-per-task=16
+#SBATCH --mem-per-cpu=5G
+#SBATCH --time=15:00
+#SBATCH --reservation=info0939
+#SBATCH --output=out/compare.out
+#SBATCH --partition=hmem
+#SBATCH --exclusive
+
+module load OpenMPI
+module load Info0939Tools
+module load Scalasca
+
+gcc SERIAL/fdtd.c -o bin/fdtd -lm -O3
+gcc -fopenmp OPENMP/fdtd_openmp.c -o bin/fdtd_openmp -lm -O3
+mpicc MPI/fdtd_mpi.c -o bin/fdtd_mpi -lm -O3
+mpicc -fopenmp MPI_OPENMP/fdtd_mpi_openmp.c -o bin/fdtd_mpi_openmp -lm -O3
+mpicc -fopenmp MPI_OPENMP/fdtd_mpi_openmp_test.c -o bin/fdtd_mpi_openmp_test -lm -O3
+mpicc -fopenmp MPI_OPENMP/fdtd_mpi_openmp_test2.c -o bin/fdtd_mpi_openmp_test2 -lm -O3
+cd ./example_inputs/simple3d
+
+export OMP_NUM_THREADS=2
+export OMP_PROC_BIND=spread
+
+echo "SERIAL"
+./../../bin/fdtd param_3d.txt
+echo "OPENMP"
+./../../bin/fdtd_openmp param_3d.txt
+echo "MPI"
+srun ../../bin/fdtd_mpi param_3d.txt
+echo "MPI + OPENMP test2"
+srun ../../bin/fdtd_mpi_openmp_test2 param_3d.txt
+echo "Let's compare on same node :D"
