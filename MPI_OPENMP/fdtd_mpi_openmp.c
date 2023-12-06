@@ -1009,30 +1009,14 @@ int interpolate_inputmaps(simulation_data_t *simdata, grid_t *simgrid,
         
         // Calcul des coordonnées réelles (x, y, z) du noeud dans la grille de simulation.
         // Ces coordonnées sont calculées en multipliant les indices de la grille par l'espacement dx.
-        // Calcul des coordonnées réelles (x, y, z) du noeud dans la grille de simulation.
-        // Ces coordonnées sont calculées en multipliant les indices de la grille par l'espacement dx.
         double x = m * dx;
         double y = n * dx;
         double z = p * dx;
 
         // Trouve les indices les plus proches (mc, nc, pc) dans la grille d'entrée (cin et rhoin).
         // Ces indices correspondent au point de la grille d'entrée le plus proche des coordonnées (x, y, z).
-        // Trouve les indices les plus proches (mc, nc, pc) dans la grille d'entrée (cin et rhoin).
-        // Ces indices correspondent au point de la grille d'entrée le plus proche des coordonnées (x, y, z).
         int mc, nc, pc;
         closest_index(&cin->grid, x, y, z, &mc, &nc, &pc);
-
-        int mc1, nc1, pc1;
-      
-        // Interpolation trilinéaire
-        // Récupère les valeurs de vitesse du son (c) et de densité (rho) aux huit coins du cube englobant.
-        // Ces coins sont situés autour du point d'intérêt pour l'interpolation.
-        mc1 = mc + 1;
-        nc1 = nc + 1;
-        pc1 = pc + 1;
-        if(mc1 >= cin->grid.numnodesx - 1) mc1 = mc;
-        if(nc1 >= cin->grid.numnodesy - 1) nc1 = nc;
-        if(pc1 >= cin->grid.numnodesz - 1) pc1 = pc;
 
         int mc1, nc1, pc1;
       
@@ -1054,13 +1038,6 @@ int interpolate_inputmaps(simulation_data_t *simdata, grid_t *simgrid,
         double c101 = GETVALUE(cin, mc1, nc, pc1);
         double c110 = GETVALUE(cin, mc1, nc1, pc);
         double c111 = GETVALUE(cin, mc1, nc1, pc1);
-        double c001 = GETVALUE(cin, mc, nc, pc1);
-        double c010 = GETVALUE(cin, mc, nc1, pc);
-        double c011 = GETVALUE(cin, mc, nc1, pc1);
-        double c100 = GETVALUE(cin, mc1, nc, pc);
-        double c101 = GETVALUE(cin, mc1, nc, pc1);
-        double c110 = GETVALUE(cin, mc1, nc1, pc);
-        double c111 = GETVALUE(cin, mc1, nc1, pc1);
 
         double rho000 = GETVALUE(rhoin, mc, nc, pc);
         double rho001 = GETVALUE(rhoin, mc, nc, pc1);
@@ -1070,24 +1047,13 @@ int interpolate_inputmaps(simulation_data_t *simdata, grid_t *simgrid,
         double rho101 = GETVALUE(rhoin, mc1, nc, pc1);
         double rho110 = GETVALUE(rhoin, mc1, nc1, pc);
         double rho111 = GETVALUE(rhoin, mc1, nc1, pc1);
-        double rho001 = GETVALUE(rhoin, mc, nc, pc1);
-        double rho010 = GETVALUE(rhoin, mc, nc1, pc);
-        double rho011 = GETVALUE(rhoin, mc, nc1, pc1);
-        double rho100 = GETVALUE(rhoin, mc1, nc, pc);
-        double rho101 = GETVALUE(rhoin, mc1, nc, pc1);
-        double rho110 = GETVALUE(rhoin, mc1, nc1, pc);
-        double rho111 = GETVALUE(rhoin, mc1, nc1, pc1);
 
-        // Calcul des facteurs de poids (tx, ty, tz) pour l'interpolation.
-        // Ces facteurs représentent la position relative du point d'intérêt à l'intérieur du cube.
         // Calcul des facteurs de poids (tx, ty, tz) pour l'interpolation.
         // Ces facteurs représentent la position relative du point d'intérêt à l'intérieur du cube.
         double tx = (x - mc * dx) / dx;
         double ty = (y - nc * dx) / dx;
         double tz = (z - pc * dx) / dx;
 
-        // Interpolation trilinéaire de la vitesse du son (c)/densité (rho) au noeud.
-        // Chaque terme de l'interpolation est un produit de la valeur à un coin et des facteurs de poids.
         // Interpolation trilinéaire de la vitesse du son (c)/densité (rho) au noeud.
         // Chaque terme de l'interpolation est un produit de la valeur à un coin et des facteurs de poids.
         double c_interp = c000 * (1 - tx) * (1 - ty) * (1 - tz) +
@@ -1132,26 +1098,8 @@ int interpolate_inputmaps(simulation_data_t *simdata, grid_t *simgrid,
 
         SETVALUE(simdata->rhohalf, m, n, p, rho_interp_half);
 
-       /*
-        tx = (x - mc * dx) / dx;
-        ty = (y - nc * dx) / dx;
-        tz = (z - pc * dx) / dx;
-
-        // Interpolation trilinéaire de la densité (rho) au point simdata->rhohalf.
-        double rho_interp_half = rho000 * (1 - tx) * (1 - ty) * (1 - tz) +
-                                rho001 * (1 - tx) * (1 - ty) * tz +
-                                rho010 * (1 - tx) * ty * (1 - tz) +
-                                rho011 * (1 - tx) * ty * tz +
-                                rho100 * tx * (1 - ty) * (1 - tz) +
-                                rho101 * tx * (1 - ty) * tz +
-                                rho110 * tx * ty * (1 - tz) +
-                                rho111 * tx * ty * tz;
-
-        SETVALUE(simdata->rhohalf, m, n, p, rho_interp_half);
-
-       /*
         // Nearest-neighbor search
-
+        /*
         double x = m * dx;
         double y = n * dx;
         double z = p * dx;

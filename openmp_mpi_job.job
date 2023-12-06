@@ -5,7 +5,6 @@
 #SBATCH --mem-per-cpu=8G
 #SBATCH --time=15:00
 #SBATCH --output=out/openmp_mpi_out.out
-#SBATCH --exclusive
 
 module load OpenMPI
 module load Info0939Tools
