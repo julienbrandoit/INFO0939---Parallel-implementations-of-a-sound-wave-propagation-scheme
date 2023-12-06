@@ -1124,6 +1124,56 @@ int interpolate_inputmaps(simulation_data_t *simdata, grid_t *simgrid,
   return 0;
 }
 
+int interpolate_inputmaps_nn(simulation_data_t *simdata, grid_t *simgrid,
+                          data_t *cin, data_t *rhoin) {
+  if (simdata == NULL || cin == NULL) {
+    DEBUG_PRINT("Invalid NULL simdata or cin");
+    return 1;
+  }
+
+  if ((simdata->c = allocate_data(simgrid)) == NULL ||
+      (simdata->rho = allocate_data(simgrid)) == NULL ||
+      (simdata->rhohalf = allocate_data(simgrid)) == NULL) {
+    DEBUG_PRINT("Failed to allocate memory");
+    return 1;
+  }
+
+  double dx = simdata->params.dx;
+  double dxd2 = simdata->params.dx / 2;
+
+  // Boucle sur chaque noeud de la grille de simulation.
+  // Ces boucles itèrent à travers les trois dimensions de la grille.
+  #pragma omp parallel for collapse(3)
+  for (int p = 0; p < simgrid->numnodesz; p++) {
+    for (int n = 0; n < simgrid->numnodesy; n++) {
+      for (int m = 0; m < simgrid->numnodesx; m++) {
+        // Nearest-neighbor search
+        
+        double x = m * dx;
+        double y = n * dx;
+        double z = p * dx;
+
+        int mc, nc, pc;
+        closest_index(&cin->grid, x, y, z, &mc, &nc, &pc);
+
+        SETVALUE(simdata->c, m, n, p, GETVALUE(cin, mc, nc, pc));
+        SETVALUE(simdata->rho, m, n, p, GETVALUE(rhoin, mc, nc, pc));
+
+        x += dxd2;
+        y += dxd2;
+        z += dxd2;
+
+        closest_index(&rhoin->grid, x, y, z, &mc, &nc, &pc);
+        SETVALUE(simdata->rhohalf, m, n, p, GETVALUE(rhoin, mc, nc, pc));
+        
+      }
+    }
+  }
+
+  return 0;
+}
+
+
 void apply_source(simulation_data_t *simdata, int step) {
   source_t *source = &simdata->params.source;
 
@@ -1511,7 +1561,7 @@ void init_simulation(simulation_data_t *simdata, const char *params_filename, pr
   sim_grid.numnodesy = size_direction[3];
   sim_grid.numnodesz = size_direction[6];
 
-  if (interpolate_inputmaps(simdata, &sim_grid, c_map, rho_map) != 0) {
+  if (interpolate_inputmaps_nn(simdata, &sim_grid, c_map, rho_map) != 0) {
     printf(
         "Error while converting input map to simulation grid. Aborting...\n\n");
     exit(1);
