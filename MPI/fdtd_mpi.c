@@ -982,10 +982,8 @@ int read_paramfile(parameters_t *params, const char *filename) {
 /******************************************************************************
  * Simulation related functions                                               *
  ******************************************************************************/
-
 int interpolate_inputmaps(simulation_data_t *simdata, grid_t *simgrid,
                           data_t *cin, data_t *rhoin) {
-  // Interpolate the input maps (cin and rhoin) to the simulation grid (simgrid)
   if (simdata == NULL || cin == NULL) {
     DEBUG_PRINT("Invalid NULL simdata or cin");
     return 1;
@@ -1001,51 +999,61 @@ int interpolate_inputmaps(simulation_data_t *simdata, grid_t *simgrid,
   double dx = simdata->params.dx;
   double dxd2 = simdata->params.dx / 2;
 
- 
+  // Boucle sur chaque noeud de la grille de simulation.
+  // Ces boucles itèrent à travers les trois dimensions de la grille.
   for (int p = 0; p < simgrid->numnodesz; p++) {
     for (int n = 0; n < simgrid->numnodesy; n++) {
       for (int m = 0; m < simgrid->numnodesx; m++) {
         
-        // Compute the coordinates (x, y, z) of the point of interest in the simulation grid.
+        // Calcul des coordonnées réelles (x, y, z) du noeud dans la grille de simulation.
+        // Ces coordonnées sont calculées en multipliant les indices de la grille par l'espacement dx.
         double x = m * dx;
         double y = n * dx;
         double z = p * dx;
 
-        // Find the closest index (mc, nc, pc) of the point of interest in the input grid.
+        // Trouve les indices les plus proches (mc, nc, pc) dans la grille d'entrée (cin et rhoin).
+        // Ces indices correspondent au point de la grille d'entrée le plus proche des coordonnées (x, y, z).
         int mc, nc, pc;
         closest_index(&cin->grid, x, y, z, &mc, &nc, &pc);
 
-        // Clamp the index to the boundaries of the input grid
-        mc = MIN(mc, cin->grid.numnodesx - 2);
-        nc = MIN(nc, cin->grid.numnodesy - 2);
-        pc = MIN(pc, cin->grid.numnodesz - 2);
+        int mc1, nc1, pc1;
       
-        /*INTERPOLATION TRILINEAIRE*/
-        // Recuperation of the values of the speed of sound (c) and density (rho) at the corners of the cube
+        // Interpolation trilinéaire
+        // Récupère les valeurs de vitesse du son (c) et de densité (rho) aux huit coins du cube englobant.
+        // Ces coins sont situés autour du point d'intérêt pour l'interpolation.
+        mc1 = mc + 1;
+        nc1 = nc + 1;
+        pc1 = pc + 1;
+        if(mc1 >= cin->grid.numnodesx - 1) mc1 = mc;
+        if(nc1 >= cin->grid.numnodesy - 1) nc1 = nc;
+        if(pc1 >= cin->grid.numnodesz - 1) pc1 = pc;
+
         double c000 = GETVALUE(cin, mc, nc, pc);
-        double c001 = GETVALUE(cin, mc, nc, pc + 1);
-        double c010 = GETVALUE(cin, mc, nc + 1, pc);
-        double c011 = GETVALUE(cin, mc, nc + 1, pc + 1);
-        double c100 = GETVALUE(cin, mc + 1, nc, pc);
-        double c101 = GETVALUE(cin, mc + 1, nc, pc + 1);
-        double c110 = GETVALUE(cin, mc + 1, nc + 1, pc);
-        double c111 = GETVALUE(cin, mc + 1, nc + 1, pc + 1);
+        double c001 = GETVALUE(cin, mc, nc, pc1);
+        double c010 = GETVALUE(cin, mc, nc1, pc);
+        double c011 = GETVALUE(cin, mc, nc1, pc1);
+        double c100 = GETVALUE(cin, mc1, nc, pc);
+        double c101 = GETVALUE(cin, mc1, nc, pc1);
+        double c110 = GETVALUE(cin, mc1, nc1, pc);
+        double c111 = GETVALUE(cin, mc1, nc1, pc1);
 
         double rho000 = GETVALUE(rhoin, mc, nc, pc);
-        double rho001 = GETVALUE(rhoin, mc, nc, pc + 1);
-        double rho010 = GETVALUE(rhoin, mc, nc + 1, pc);
-        double rho011 = GETVALUE(rhoin, mc, nc + 1, pc + 1);
-        double rho100 = GETVALUE(rhoin, mc + 1, nc, pc);
-        double rho101 = GETVALUE(rhoin, mc + 1, nc, pc + 1);
-        double rho110 = GETVALUE(rhoin, mc + 1, nc + 1, pc);
-        double rho111 = GETVALUE(rhoin, mc + 1, nc + 1, pc + 1);
+        double rho001 = GETVALUE(rhoin, mc, nc, pc1);
+        double rho010 = GETVALUE(rhoin, mc, nc1, pc);
+        double rho011 = GETVALUE(rhoin, mc, nc1, pc1);
+        double rho100 = GETVALUE(rhoin, mc1, nc, pc);
+        double rho101 = GETVALUE(rhoin, mc1, nc, pc1);
+        double rho110 = GETVALUE(rhoin, mc1, nc1, pc);
+        double rho111 = GETVALUE(rhoin, mc1, nc1, pc1);
 
-        // Compute the factors of weight for the interpolation
+        // Calcul des facteurs de poids (tx, ty, tz) pour l'interpolation.
+        // Ces facteurs représentent la position relative du point d'intérêt à l'intérieur du cube.
         double tx = (x - mc * dx) / dx;
         double ty = (y - nc * dx) / dx;
         double tz = (z - pc * dx) / dx;
 
-        // Interpolation of the values of the speed of sound (c) and density (rho) at the point of interest with the trilinear interpolation
+        // Interpolation trilinéaire de la vitesse du son (c)/densité (rho) au noeud.
+        // Chaque terme de l'interpolation est un produit de la valeur à un coin et des facteurs de poids.
         double c_interp = c000 * (1 - tx) * (1 - ty) * (1 - tz) +
                          c001 * (1 - tx) * (1 - ty) * tz +
                          c010 * (1 - tx) * ty * (1 - tz) +
@@ -1069,12 +1077,25 @@ int interpolate_inputmaps(simulation_data_t *simdata, grid_t *simgrid,
         x += dxd2;
         y += dxd2;
         z += dxd2;
-
+        
         closest_index(&rhoin->grid, x, y, z, &mc, &nc, &pc);
-        SETVALUE(simdata->rhohalf, m, n, p, GETVALUE(rhoin, mc, nc, pc));
+        tx = (x - mc * dx) / dx;
+        ty = (y - nc * dx) / dx;
+        tz = (z - pc * dx) / dx;
 
-      /*INTERPOLATION NEAREST NEIGHBOR*/
-      /*
+        // Interpolation trilinéaire de la densité (rho) au point simdata->rhohalf.
+        double rho_interp_half = rho000 * (1 - tx) * (1 - ty) * (1 - tz) +
+                                rho001 * (1 - tx) * (1 - ty) * tz +
+                                rho010 * (1 - tx) * ty * (1 - tz) +
+                                rho011 * (1 - tx) * ty * tz +
+                                rho100 * tx * (1 - ty) * (1 - tz) +
+                                rho101 * tx * (1 - ty) * tz +
+                                rho110 * tx * ty * (1 - tz) +
+                                rho111 * tx * ty * tz;
+
+        SETVALUE(simdata->rhohalf, m, n, p, rho_interp_half);
+
+       /*
         // Nearest-neighbor search
 
         double x = m * dx;
@@ -1101,6 +1122,8 @@ int interpolate_inputmaps(simulation_data_t *simdata, grid_t *simgrid,
   return 0;
 }
 
+
+  
 void apply_source(simulation_data_t *simdata, int step) {
   source_t *source = &simdata->params.source;
 
