@@ -9,8 +9,8 @@
 module load Info0939Tools
 
 gcc SERIAL/fdtd.c -o bin/fdtd -lm -O3
-cd ./example_inputs/simple3d
-srun ../../bin/fdtd param_3d.txt
-rm cutx.msh
-data2gmsh -cutx 0.5 out_p.dat 
-cd ../..
+cd ./example_inputs/slit
+
+./../../bin/fdtd param_slit_1x.txt
+./../../tools/build/data2gmsh out_slit_1x_pz_025.dat
+gmsh full.msh

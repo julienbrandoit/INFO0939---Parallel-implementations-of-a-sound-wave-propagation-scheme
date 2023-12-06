@@ -6,14 +6,14 @@
 #SBATCH --time=10:00
 #SBATCH --output=out/openmp_out.out
 
-module load Info0939Tools
+#module load Info0939Tools
 
 gcc  -fopenmp OPENMP/fdtd_openmp.c -o bin/fdtd_openmp -lm -O3
-cd ./example_inputs/simple3d
+cd ./example_inputs/slit
 
-export OMP_NUM_THREADS=2
+export OMP_NUM_THREADS=1
 export OMP_PROC_BIND=spread
 
-./../../bin/fdtd_openmp param_3d.txt
-
-cd ../..
+./../../bin/fdtd_openmp param_slit_1x.txt
+./../../tools/build/data2gmsh out_slit_1x_pz_025.dat
+gmsh full.msh
