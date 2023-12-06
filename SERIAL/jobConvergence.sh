@@ -11,7 +11,7 @@ gcc -O3 -o fdtd fdtd.c -lm
 
 # List of parameter files
 
-param_files=("convergence3.txt" "convergence4.txt" "convergence5.txt" "convergence6.txt" "convergence7.txt") # Ajoutez vos fichiers ici
+param_files=("convergence3.txt") 
 # Loop over each parameter file
 for param_file in "${param_files[@]}"
 do
@@ -23,8 +23,8 @@ do
     output_dir="outputs_${number}"
 
     # Run the program
-    cd example_inputs/simple3d
-    ../../fdtd $param_file
+    cd ../example_inputs/simple3d
+    ../../SERIAL/fdtd $param_file
 
     # Save the output
     mkdir -p ${output_dir}

@@ -748,6 +748,7 @@ int interpolate_inputmaps(simulation_data_t *simdata, grid_t *simgrid,
 
   // Boucle sur chaque noeud de la grille de simulation.
   // Ces boucles itèrent à travers les trois dimensions de la grille.
+  #pragma omp parallel for collapse(3)
   for (int p = 0; p < simgrid->numnodesz; p++) {
     for (int n = 0; n < simgrid->numnodesy; n++) {
       for (int m = 0; m < simgrid->numnodesx; m++) {
@@ -763,31 +764,35 @@ int interpolate_inputmaps(simulation_data_t *simdata, grid_t *simgrid,
         int mc, nc, pc;
         closest_index(&cin->grid, x, y, z, &mc, &nc, &pc);
 
-        // Gestion des bords de la grille
-        mc = MIN(mc, cin->grid.numnodesx - 2);
-        nc = MIN(nc, cin->grid.numnodesy - 2);
-        pc = MIN(pc, cin->grid.numnodesz - 2);
+        int mc1, nc1, pc1;
       
         // Interpolation trilinéaire
         // Récupère les valeurs de vitesse du son (c) et de densité (rho) aux huit coins du cube englobant.
         // Ces coins sont situés autour du point d'intérêt pour l'interpolation.
+        mc1 = mc + 1;
+        nc1 = nc + 1;
+        pc1 = pc + 1;
+        if(mc1 >= cin->grid.numnodesx - 1) mc1 = mc;
+        if(nc1 >= cin->grid.numnodesy - 1) nc1 = nc;
+        if(pc1 >= cin->grid.numnodesz - 1) pc1 = pc;
+
         double c000 = GETVALUE(cin, mc, nc, pc);
-        double c001 = GETVALUE(cin, mc, nc, pc + 1);
-        double c010 = GETVALUE(cin, mc, nc + 1, pc);
-        double c011 = GETVALUE(cin, mc, nc + 1, pc + 1);
-        double c100 = GETVALUE(cin, mc + 1, nc, pc);
-        double c101 = GETVALUE(cin, mc + 1, nc, pc + 1);
-        double c110 = GETVALUE(cin, mc + 1, nc + 1, pc);
-        double c111 = GETVALUE(cin, mc + 1, nc + 1, pc + 1);
+        double c001 = GETVALUE(cin, mc, nc, pc1);
+        double c010 = GETVALUE(cin, mc, nc1, pc);
+        double c011 = GETVALUE(cin, mc, nc1, pc1);
+        double c100 = GETVALUE(cin, mc1, nc, pc);
+        double c101 = GETVALUE(cin, mc1, nc, pc1);
+        double c110 = GETVALUE(cin, mc1, nc1, pc);
+        double c111 = GETVALUE(cin, mc1, nc1, pc1);
 
         double rho000 = GETVALUE(rhoin, mc, nc, pc);
-        double rho001 = GETVALUE(rhoin, mc, nc, pc + 1);
-        double rho010 = GETVALUE(rhoin, mc, nc + 1, pc);
-        double rho011 = GETVALUE(rhoin, mc, nc + 1, pc + 1);
-        double rho100 = GETVALUE(rhoin, mc + 1, nc, pc);
-        double rho101 = GETVALUE(rhoin, mc + 1, nc, pc + 1);
-        double rho110 = GETVALUE(rhoin, mc + 1, nc + 1, pc);
-        double rho111 = GETVALUE(rhoin, mc + 1, nc + 1, pc + 1);
+        double rho001 = GETVALUE(rhoin, mc, nc, pc1);
+        double rho010 = GETVALUE(rhoin, mc, nc1, pc);
+        double rho011 = GETVALUE(rhoin, mc, nc1, pc1);
+        double rho100 = GETVALUE(rhoin, mc1, nc, pc);
+        double rho101 = GETVALUE(rhoin, mc1, nc, pc1);
+        double rho110 = GETVALUE(rhoin, mc1, nc1, pc);
+        double rho111 = GETVALUE(rhoin, mc1, nc1, pc1);
 
         // Calcul des facteurs de poids (tx, ty, tz) pour l'interpolation.
         // Ces facteurs représentent la position relative du point d'intérêt à l'intérieur du cube.
@@ -820,9 +825,24 @@ int interpolate_inputmaps(simulation_data_t *simdata, grid_t *simgrid,
         x += dxd2;
         y += dxd2;
         z += dxd2;
-
+        
         closest_index(&rhoin->grid, x, y, z, &mc, &nc, &pc);
-        SETVALUE(simdata->rhohalf, m, n, p, GETVALUE(rhoin, mc, nc, pc));
+        tx = (x - mc * dx) / dx;
+        ty = (y - nc * dx) / dx;
+        tz = (z - pc * dx) / dx;
+
+        // Interpolation trilinéaire de la densité (rho) au point simdata->rhohalf.
+        double rho_interp_half = rho000 * (1 - tx) * (1 - ty) * (1 - tz) +
+                                rho001 * (1 - tx) * (1 - ty) * tz +
+                                rho010 * (1 - tx) * ty * (1 - tz) +
+                                rho011 * (1 - tx) * ty * tz +
+                                rho100 * tx * (1 - ty) * (1 - tz) +
+                                rho101 * tx * (1 - ty) * tz +
+                                rho110 * tx * ty * (1 - tz) +
+                                rho111 * tx * ty * tz;
+
+        SETVALUE(simdata->rhohalf, m, n, p, rho_interp_half);
+
        /*
         // Nearest-neighbor search
 
@@ -893,7 +913,7 @@ void update_pressure(simulation_data_t *simdata) {
   We gain a factor of about 5 time faster !!
   */
 
-  #pragma omp parallel for collapse(2)
+  #pragma omp parallel for collapse(3)
   for (int p = 0; p < numnodesz; p++) {
     for (int n = 0; n < numnodesy; n++) {
       for (int m = 0; m < numnodesx; m++) {
@@ -939,7 +959,7 @@ void update_velocities(simulation_data_t *simdata) {
   We gain a factor of about 5 time faster !!
   */
 
-  #pragma omp parallel for collapse(2)
+  #pragma omp parallel for collapse(3)
   for (int p = 0; p < numnodesz; p++) {
     for (int n = 0; n < numnodesy; n++) {
       for (int m = 0; m < numnodesx; m++) {
