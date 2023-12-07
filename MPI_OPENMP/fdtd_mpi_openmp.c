@@ -1092,22 +1092,6 @@ int interpolate_inputmaps(simulation_data_t *simdata, grid_t *simgrid,
         tyrho = (y - nc * dy_rho) / dy_rho;
         tzrho = (z - pc * dz_rho) / dz_rho;
 
-                // Interpolation trilinéaire
-        // Récupère les valeurs de vitesse du son (c) et de densité (rho) aux huit coins du cube englobant.
-        // Ces coins sont situés autour du point d'intérêt pour l'interpolation.
-        mc1 = mc + 1;
-        nc1 = nc + 1;
-        pc1 = pc + 1;
-
-        rho000 = GETVALUE(rhoin, mc, nc, pc);
-        rho001 = GETVALUE(rhoin, mc, nc, pc1);
-        rho010 = GETVALUE(rhoin, mc, nc1, pc);
-        rho011 = GETVALUE(rhoin, mc, nc1, pc1);
-        rho100 = GETVALUE(rhoin, mc1, nc, pc);
-        rho101 = GETVALUE(rhoin, mc1, nc, pc1);
-        rho110 = GETVALUE(rhoin, mc1, nc1, pc);
-        rho111 = GETVALUE(rhoin, mc1, nc1, pc1);
-
         // Interpolation trilinéaire de la densité (rho) au point simdata->rhohalf.
         double rho_interp_half = rho000 * (1 - txrho) * (1 - tyrho) * (1 - tzrho) +
                             rho001 * (1 - txrho) * (1 - tyrho) * tzrho +
