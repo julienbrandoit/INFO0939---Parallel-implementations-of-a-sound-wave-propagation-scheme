@@ -1,0 +1,19 @@
+#!/bin/bash
+#SBATCH --job-name="fdtd_openmp_gpu"
+#SBATCH --partition=gpu
+#SBATCH --ntasks=1
+#SBATCH --mem=4G
+#SBATCH --gpus=1
+#SBATCH --time=15:00
+#SBATCH --output=fdtd_openmp_gpu.out
+#SBATCH --account=ulghpsc
+
+module load Clang/16.0.6-GCCcore-11.3.0-CUDA-11.7.0
+module load Info0939Tools
+
+export OMP_TARGET_OFFLOAD=MANDATORY
+
+clang -O3 -fopenmp --offload-arch=sm_80 -o fdtd_openmpGPU fdtd_openmpGPU.c -lm
+
+cd ./example_inputs/simple3d
+srun ../../fdtd_openmpGPU param_3d.txt
