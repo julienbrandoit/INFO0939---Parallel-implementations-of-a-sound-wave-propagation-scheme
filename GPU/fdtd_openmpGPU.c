@@ -398,7 +398,10 @@ int write_output(output_t *output, data_t *data, int step, double time) {
 
   data_t *tmpdata = allocate_data(&output->grid);
   
-  
+  // Mapping des données vers le GPU
+  #pragma omp target map(to: data[0:1], data->vals[0:NUMNODESTOT(data->grid)]) \
+                    map(from: tmpdata[0:1], tmpdata->vals[0:NUMNODESTOT(tmpdata->grid)])
+  #pragma omp teams distribute parallel for collapse(3)
   for (m = startm; m < endm; m++) {
     for (n = startn; n < endn; n++) {
       for (p = startp; p < endp; p++) {
@@ -743,18 +746,16 @@ int interpolate_inputmaps(simulation_data_t *simdata, grid_t *simgrid,
     return 1;
   }
 
+  // Déclarations des variables à l'intérieur de la région target
   double dx = simdata->params.dx;
-  double dxd2 = simdata->params.dx / 2;
+  double dxd2 = dx / 2;
+  double dx_c = (cin->grid.xmax - cin->grid.xmin) / (cin->grid.numnodesx);
+  double dy_c = (cin->grid.ymax - cin->grid.ymin) / (cin->grid.numnodesy);
+  double dz_c = (cin->grid.zmax - cin->grid.zmin) / (cin->grid.numnodesz);
+  double dx_rho = (rhoin->grid.xmax - rhoin->grid.xmin) / (rhoin->grid.numnodesx);
+  double dy_rho = (rhoin->grid.ymax - rhoin->grid.ymin) / (rhoin->grid.numnodesy);
+  double dz_rho = (rhoin->grid.zmax - rhoin->grid.zmin) / (rhoin->grid.numnodesz);
 
-  double dx_c = (cin->grid.xmax - cin->grid.xmin)/(cin->grid.numnodesx);
-  double dy_c = (cin->grid.ymax - cin->grid.ymin)/(cin->grid.numnodesy);
-  double dz_c = (cin->grid.zmax - cin->grid.zmin)/(cin->grid.numnodesz);
-  double dx_rho = (rhoin->grid.xmax - rhoin->grid.xmin)/(rhoin->grid.numnodesx);
-  double dy_rho = (rhoin->grid.ymax - rhoin->grid.ymin)/(rhoin->grid.numnodesy);
-  double dz_rho = (rhoin->grid.zmax - rhoin->grid.zmin)/(rhoin->grid.numnodesz);
-  
-  // Boucle sur chaque noeud de la grille de simulation.
-  // Ces boucles itèrent à travers les trois dimensions de la grille.
   
   for (int p = 0; p < simgrid->numnodesz; p++) {
     for (int n = 0; n < simgrid->numnodesy; n++) {
@@ -810,13 +811,13 @@ int interpolate_inputmaps(simulation_data_t *simdata, grid_t *simgrid,
         // Interpolation trilinéaire de la vitesse du son (c)/densité (rho) au noeud.
         // Chaque terme de l'interpolation est un produit de la valeur à un coin et des facteurs de poids.
         double c_interp = c000 * (1 - txc) * (1 - tyc) * (1 - tzc) +
-                         c001 * (1 - txc) * (1 - tyc) * tzc +
-                         c010 * (1 - txc) * tyc * (1 - tzc) +
-                         c011 * (1 - txc) * tyc * tzc +
-                         c100 * txc * (1 - tyc) * (1 - tzc) +
-                         c101 * txc * (1 - tyc) * tzc +
-                         c110 * txc * tyc * (1 - tzc) +
-                         c111 * txc * tyc * tzc;
+                        c001 * (1 - txc) * (1 - tyc) * tzc +
+                        c010 * (1 - txc) * tyc * (1 - tzc) +
+                        c011 * (1 - txc) * tyc * tzc +
+                        c100 * txc * (1 - tyc) * (1 - tzc) +
+                        c101 * txc * (1 - tyc) * tzc +
+                        c110 * txc * tyc * (1 - tzc) +
+                        c111 * txc * tyc * tzc;
 
         double rho_interp = rho000 * (1 - txrho) * (1 - tyrho) * (1 - tzrho) +
                             rho001 * (1 - txrho) * (1 - tyrho) * tzrho +
@@ -852,7 +853,7 @@ int interpolate_inputmaps(simulation_data_t *simdata, grid_t *simgrid,
       }
     }
   }
-
+  
   return 0;
 }
 
