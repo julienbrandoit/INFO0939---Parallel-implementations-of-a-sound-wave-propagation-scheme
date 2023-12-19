@@ -15,6 +15,10 @@ int main(int argc, const char *argv[]) {
   simulation_data_t simdata;
   init_simulation(&simdata, argv[1]);
 
+  // Préparation pour le transfert de données vers le GPU
+  #pragma omp target enter data map(to: simdata, simdata.params, simdata.c->grid, simdata.rho->grid, simdata.rhohalf->grid, simdata.pold->grid, simdata.pnew->grid, simdata.vxold->grid, simdata.vxnew->grid, simdata.vyold->grid, simdata.vynew->grid, simdata.vzold->grid, simdata.vznew->grid, simdata.c->vals[:NUMNODESTOT(simdata.c->grid)], simdata.rho->vals[:NUMNODESTOT(simdata.rho->grid)], simdata.rhohalf->vals[:NUMNODESTOT(simdata.rhohalf->grid)], simdata.pold->vals[:NUMNODESTOT(simdata.pold->grid)], simdata.pnew->vals[:NUMNODESTOT(simdata.pnew->grid)], simdata.vxold->vals[:NUMNODESTOT(simdata.vxold->grid)], simdata.vxnew->vals[:NUMNODESTOT(simdata.vxnew->grid)], simdata.vyold->vals[:NUMNODESTOT(simdata.vyold->grid)], simdata.vynew->vals[:NUMNODESTOT(simdata.vynew->grid)], simdata.vzold->vals[:NUMNODESTOT(simdata.vzold->grid)], simdata.vznew->vals[:NUMNODESTOT(simdata.vznew->grid)])
+
+
   int numtimesteps = floor(simdata.params.maxt / simdata.params.dt);
 
   double start = GET_TIME();
@@ -22,6 +26,9 @@ int main(int argc, const char *argv[]) {
     apply_source(&simdata, tstep);
 
     if (simdata.params.outrate > 0 && (tstep % simdata.params.outrate) == 0) {
+      // Transfert des données nécessaires pour l'output du GPU vers le CPU
+      #pragma omp target update from(simdata.pold->vals[:NUMNODESTOT(simdata.pold->grid)], simdata.vxold->vals[:NUMNODESTOT(simdata.vxold->grid)], simdata.vyold->vals[:NUMNODESTOT(simdata.vyold->grid)], simdata.vzold->vals[:NUMNODESTOT(simdata.vzold->grid)], simdata.pold->grid, simdata.vxold->grid, simdata.vyold->grid, simdata.vzold->grid)
+
       for (int i = 0; i < simdata.params.numoutputs; i++) {
         data_t *output_data = NULL;
 
@@ -63,19 +70,25 @@ int main(int argc, const char *argv[]) {
       printf("\n");
       fflush(stdout);
     }
-
-    update_pressure(&simdata);
+    
+    #pragma omp target
     update_velocities(&simdata);
+    #pragma omp target
+    update_pressure(&simdata);
+    // Synchronisation entre les deux fonctions précédentes
+    #pragma omp barrier
+
+    
+    #pragma omp target 
     swap_timesteps(&simdata);
+    
   }
 
   double elapsed = GET_TIME() - start;
-  double numupdates =
-      (double)NUMNODESTOT(simdata.pold->grid) * (numtimesteps + 1);
+  double numupdates = (double)NUMNODESTOT(simdata.pold->grid) * (numtimesteps + 1);
   double updatespers = numupdates / elapsed / 1e6;
 
-  printf("\nElapsed %.6lf seconds (%.3lf Mupdates/s)\n\n", elapsed,
-         updatespers);
+  printf("\nElapsed %.6lf seconds (%.3lf Mupdates/s)\n\n", elapsed, updatespers);
 
   finalize_simulation(&simdata);
 
@@ -398,10 +411,7 @@ int write_output(output_t *output, data_t *data, int step, double time) {
 
   data_t *tmpdata = allocate_data(&output->grid);
   
-  // Mapping des données vers le GPU
-  #pragma omp target map(to: data[0:1], data->vals[0:NUMNODESTOT(data->grid)]) \
-                    map(from: tmpdata[0:1], tmpdata->vals[0:NUMNODESTOT(tmpdata->grid)])
-  #pragma omp teams distribute parallel for collapse(3)
+  
   for (m = startm; m < endm; m++) {
     for (n = startn; n < endn; n++) {
       for (p = startp; p < endp; p++) {
@@ -947,27 +957,7 @@ void update_pressure(simulation_data_t *simdata) {
 
   We gain a factor of about 5 time faster !!
   */
-
-  
-  #pragma omp target map(to: simdata[0:1]) \
-                   map(to: simdata->c[0:1], simdata->rho[0:1], simdata->rhohalf[0:1]) \
-                   map(to: simdata->pold[0:1], simdata->pnew[0:1]) \
-                   map(to: simdata->vxold[0:1], simdata->vxnew[0:1]) \
-                   map(to: simdata->vyold[0:1], simdata->vynew[0:1]) \
-                   map(to: simdata->vzold[0:1], simdata->vznew[0:1]) \
-                   map(to: simdata->c->vals[0:NUMNODESTOT(simdata->c->grid)], \
-                       simdata->rho->vals[0:NUMNODESTOT(simdata->rho->grid)], \
-                       simdata->rhohalf->vals[0:NUMNODESTOT(simdata->rhohalf->grid)]) \
-                   map(tofrom: simdata->pold->vals[0:NUMNODESTOT(simdata->pold->grid)], \
-                       simdata->pnew->vals[0:NUMNODESTOT(simdata->pnew->grid)]) \
-                   map(tofrom: simdata->vxold->vals[0:NUMNODESTOT(simdata->vxold->grid)], \
-                       simdata->vxnew->vals[0:NUMNODESTOT(simdata->vxnew->grid)]) \
-                   map(tofrom: simdata->vyold->vals[0:NUMNODESTOT(simdata->vyold->grid)], \
-                       simdata->vynew->vals[0:NUMNODESTOT(simdata->vynew->grid)]) \
-                   map(tofrom: simdata->vzold->vals[0:NUMNODESTOT(simdata->vzold->grid)], \
-                       simdata->vznew->vals[0:NUMNODESTOT(simdata->vznew->grid)])
-
-  #pragma omp teams distribute parallel for collapse(3)
+  #pragma omp parallel for collapse(3)
   for (int p = 0; p < numnodesz; p++) {
     for (int n = 0; n < numnodesy; n++) {
       for (int m = 0; m < numnodesx; m++) {
@@ -1013,24 +1003,7 @@ void update_velocities(simulation_data_t *simdata) {
   We gain a factor of about 5 time faster !!
   */
   
-#pragma omp target map(to: simdata[0:1]) \
-                   map(to: simdata->rhohalf[0:1], \
-                       simdata->vxold[0:1], \
-                       simdata->vyold[0:1], \
-                       simdata->vzold[0:1], \
-                       simdata->pnew[0:1]) \
-                   map(to: simdata->rhohalf->vals[0:NUMNODESTOT(simdata->rhohalf->grid)], \
-                       simdata->vxold->vals[0:NUMNODESTOT(simdata->vxold->grid)], \
-                       simdata->vyold->vals[0:NUMNODESTOT(simdata->vyold->grid)], \
-                       simdata->vzold->vals[0:NUMNODESTOT(simdata->vzold->grid)], \
-                       simdata->pnew->vals[0:NUMNODESTOT(simdata->pnew->grid)]) \
-                   map(tofrom: simdata->vxnew[0:1], \
-                       simdata->vynew[0:1], \
-                       simdata->vznew[0:1]) \
-                   map(tofrom: simdata->vxnew->vals[0:NUMNODESTOT(simdata->vxnew->grid)], \
-                       simdata->vynew->vals[0:NUMNODESTOT(simdata->vynew->grid)], \
-                       simdata->vznew->vals[0:NUMNODESTOT(simdata->vznew->grid)])
-  #pragma omp teams distribute parallel for collapse(3)
+  #pragma omp parallel for collapse(3)
   for (int p = 0; p < numnodesz; p++) {
     for (int n = 0; n < numnodesy; n++) {
       for (int m = 0; m < numnodesx; m++) {
