@@ -15,19 +15,31 @@ int main(int argc, const char *argv[]) {
   simulation_data_t simdata;
   init_simulation(&simdata, argv[1]);
 
-  // Préparation pour le transfert de données vers le GPU
-  #pragma omp target enter data map(to: simdata, simdata.params, simdata.c->grid, simdata.rho->grid, simdata.rhohalf->grid, simdata.pold->grid, simdata.pnew->grid, simdata.vxold->grid, simdata.vxnew->grid, simdata.vyold->grid, simdata.vynew->grid, simdata.vzold->grid, simdata.vznew->grid, simdata.c->vals[:NUMNODESTOT(simdata.c->grid)], simdata.rho->vals[:NUMNODESTOT(simdata.rho->grid)], simdata.rhohalf->vals[:NUMNODESTOT(simdata.rhohalf->grid)], simdata.pold->vals[:NUMNODESTOT(simdata.pold->grid)], simdata.pnew->vals[:NUMNODESTOT(simdata.pnew->grid)], simdata.vxold->vals[:NUMNODESTOT(simdata.vxold->grid)], simdata.vxnew->vals[:NUMNODESTOT(simdata.vxnew->grid)], simdata.vyold->vals[:NUMNODESTOT(simdata.vyold->grid)], simdata.vynew->vals[:NUMNODESTOT(simdata.vynew->grid)], simdata.vzold->vals[:NUMNODESTOT(simdata.vzold->grid)], simdata.vznew->vals[:NUMNODESTOT(simdata.vznew->grid)])
-
-
   int numtimesteps = floor(simdata.params.maxt / simdata.params.dt);
-
   double start = GET_TIME();
+
+  // Transfer of the data needed for the simulation from the CPU to the GPU
+  #pragma omp target enter data map(to: simdata.c[0:1], simdata.c->grid, simdata.c->vals[:NUMNODESTOT(simdata.c->grid)]) \
+                                  map(to: simdata.rho[0:1], simdata.rho->grid, simdata.rho->vals[:NUMNODESTOT(simdata.rho->grid)]) \
+                                  map(to: simdata.rhohalf[0:1], simdata.rhohalf->grid, simdata.rhohalf->vals[:NUMNODESTOT(simdata.rhohalf->grid)]) \
+                                  map(to: simdata.pold[0:1], simdata.pold->grid, simdata.pold->vals[:NUMNODESTOT(simdata.pold->grid)]) \
+                                  map(to: simdata.pnew[0:1], simdata.pnew->grid, simdata.pnew->vals[:NUMNODESTOT(simdata.pnew->grid)]) \
+                                  map(to: simdata.vxold[0:1], simdata.vxold->grid, simdata.vxold->vals[:NUMNODESTOT(simdata.vxold->grid)]) \
+                                  map(to: simdata.vxnew[0:1], simdata.vxnew->grid, simdata.vxnew->vals[:NUMNODESTOT(simdata.vxnew->grid)]) \
+                                  map(to: simdata.vyold[0:1], simdata.vyold->grid, simdata.vyold->vals[:NUMNODESTOT(simdata.vyold->grid)]) \
+                                  map(to: simdata.vynew[0:1], simdata.vynew->grid, simdata.vynew->vals[:NUMNODESTOT(simdata.vynew->grid)]) \
+                                  map(to: simdata.vzold[0:1], simdata.vzold->grid, simdata.vzold->vals[:NUMNODESTOT(simdata.vzold->grid)]) \
+                                  map(to: simdata.vznew[0:1], simdata.vznew->grid, simdata.vznew->vals[:NUMNODESTOT(simdata.vznew->grid)])
+
   for (int tstep = 0; tstep <= numtimesteps; tstep++) {
     apply_source(&simdata, tstep);
 
     if (simdata.params.outrate > 0 && (tstep % simdata.params.outrate) == 0) {
-      // Transfert des données nécessaires pour l'output du GPU vers le CPU
-      #pragma omp target update from(simdata.pold->vals[:NUMNODESTOT(simdata.pold->grid)], simdata.vxold->vals[:NUMNODESTOT(simdata.vxold->grid)], simdata.vyold->vals[:NUMNODESTOT(simdata.vyold->grid)], simdata.vzold->vals[:NUMNODESTOT(simdata.vzold->grid)], simdata.pold->grid, simdata.vxold->grid, simdata.vyold->grid, simdata.vzold->grid)
+      // Transfer of the data needed for the output from the GPU to the CPU
+      #pragma omp target update from(simdata.pold->vals[:NUMNODESTOT(simdata.pold->grid)])
+      #pragma omp target update from(simdata.vxold->vals[:NUMNODESTOT(simdata.vxold->grid)])
+      #pragma omp target update from(simdata.vyold->vals[:NUMNODESTOT(simdata.vyold->grid)])
+      #pragma omp target update from(simdata.vzold->vals[:NUMNODESTOT(simdata.vzold->grid)])
 
       for (int i = 0; i < simdata.params.numoutputs; i++) {
         data_t *output_data = NULL;
@@ -71,15 +83,8 @@ int main(int argc, const char *argv[]) {
       fflush(stdout);
     }
     
-    #pragma omp target
-    update_velocities(&simdata);
-    #pragma omp target
     update_pressure(&simdata);
-    // Synchronisation entre les deux fonctions précédentes
-    #pragma omp barrier
-
-    
-    #pragma omp target 
+    update_velocities(&simdata);
     swap_timesteps(&simdata);
     
   }
@@ -756,7 +761,7 @@ int interpolate_inputmaps(simulation_data_t *simdata, grid_t *simgrid,
     return 1;
   }
 
-  // Déclarations des variables à l'intérieur de la région target
+  // Declaration of the variables used for the interpolation
   double dx = simdata->params.dx;
   double dxd2 = dx / 2;
   double dx_c = (cin->grid.xmax - cin->grid.xmin) / (cin->grid.numnodesx);
@@ -771,26 +776,26 @@ int interpolate_inputmaps(simulation_data_t *simdata, grid_t *simgrid,
     for (int n = 0; n < simgrid->numnodesy; n++) {
       for (int m = 0; m < simgrid->numnodesx; m++) {
         
-        // Calcul des coordonnées réelles (x, y, z) du noeud dans la grille de simulation.
-        // Ces coordonnées sont calculées en multipliant les indices de la grille par l'espacement dx.
+        // Computations of the coordinates of the point of interest (x, y, z).
+        // These coordinates are the center of the node of the simulation grid.
         double x = simgrid->xmin + m * dx;
         double y = simgrid->ymin + n * dx;
         double z = simgrid->zmin + p * dx;
-        // Trouve les indices les plus proches (mc, nc, pc) dans la grille d'entrée (cin et rhoin).
-        // Ces indices correspondent au point de la grille d'entrée le plus proche des coordonnées (x, y, z).
+        // Find the closest indices (mc, nc, pc) in the input grid.
+        // These indices are the indices of the cube around the point of interest.
         int mc, nc, pc;
         closest_index(&cin->grid, x, y, z, &mc, &nc, &pc);
 
         int mc1, nc1, pc1;
       
-        // Interpolation trilinéaire
-        // Récupère les valeurs de vitesse du son (c) et de densité (rho) aux huit coins du cube englobant.
-        // Ces coins sont situés autour du point d'intérêt pour l'interpolation.
+        // Trilinear interpolation of the speed of sound (c) and density (rho) at the point of interest.
+        // Recuperation of the values of the speed of sound (c) and density (rho) at the corners of the cube.
+        // These values are used for the interpolation.
         mc1 = mc + 1;
         nc1 = nc + 1;
         pc1 = pc + 1;
-        // Calcul des facteurs de poids (tx, ty, tz) pour l'interpolation.
-        // Ces facteurs représentent la position relative du point d'intérêt à l'intérieur du cube.
+        // Computations of the factors of weight for the interpolation.
+        // These factors are the distance between the point of interest and the closest indices.
         
         double txc = (x - mc * dx_c) / dx_c;
         double tyc = (y - nc * dy_c) / dy_c;
@@ -818,8 +823,8 @@ int interpolate_inputmaps(simulation_data_t *simdata, grid_t *simgrid,
         double rho110 = GETVALUE(rhoin, mc1, nc1, pc);
         double rho111 = GETVALUE(rhoin, mc1, nc1, pc1);
 
-        // Interpolation trilinéaire de la vitesse du son (c)/densité (rho) au noeud.
-        // Chaque terme de l'interpolation est un produit de la valeur à un coin et des facteurs de poids.
+        // Trilinear interpolation of the speed of sound (c) and density (rho) at the point of interest.
+        // Each corner of the cube is weighted by the distance between the point of interest and the corner.
         double c_interp = c000 * (1 - txc) * (1 - tyc) * (1 - tzc) +
                         c001 * (1 - txc) * (1 - tyc) * tzc +
                         c010 * (1 - txc) * tyc * (1 - tzc) +
@@ -849,7 +854,7 @@ int interpolate_inputmaps(simulation_data_t *simdata, grid_t *simgrid,
         tyrho = (y - nc * dy_rho) / dy_rho;
         tzrho = (z - pc * dz_rho) / dz_rho;
 
-        // Interpolation trilinéaire de la densité (rho) au point simdata->rhohalf.
+        // Trilinear interpolation of the speed of sound (c) and density (rho) at the point of interest.
         double rho_interp_half = rho000 * (1 - txrho) * (1 - tyrho) * (1 - tzrho) +
                             rho001 * (1 - txrho) * (1 - tyrho) * tzrho +
                             rho010 * (1 - txrho) * tyrho * (1 - tzrho) +
@@ -883,9 +888,6 @@ int interpolate_inputmaps_nn(simulation_data_t *simdata, grid_t *simgrid,
 
   double dx = simdata->params.dx;
   double dxd2 = simdata->params.dx / 2;
-
-  // Boucle sur chaque noeud de la grille de simulation.
-  // Ces boucles itèrent à travers les trois dimensions de la grille.
 
   for (int p = 0; p < simgrid->numnodesz; p++) {
     for (int n = 0; n < simgrid->numnodesy; n++) {
@@ -931,12 +933,16 @@ void apply_source(simulation_data_t *simdata, int step) {
     double freq = source->data[0];
 
     SETVALUE(simdata->pold, m, n, p, sin(2 * M_PI * freq * t));
+    // Update the value of the pressure from de CPU to the GPU
+    #pragma omp target update to(simdata->pold->vals[INDEX3D(simdata->pold->grid, m, n, p):1])
 
   } else if (source->type == AUDIO) {
     int sample = MIN((int)(t * source->sampling), source->numsamples);
-
     SETVALUE(simdata->pold, m, n, p, simdata->params.source.data[sample]);
+    // Update the value of the pressure from de CPU to the GPU
+    #pragma omp target update to(simdata->pold->vals[INDEX3D(simdata->pold->grid, m, n, p):1])
   }
+  
 }
 
 void update_pressure(simulation_data_t *simdata) {
@@ -957,8 +963,11 @@ void update_pressure(simulation_data_t *simdata) {
 
   We gain a factor of about 5 time faster !!
   */
-  #pragma omp parallel for collapse(3)
+
+  // Perform the update of the pressure on the GPU
+  #pragma omp target teams distribute 
   for (int p = 0; p < numnodesz; p++) {
+    #pragma omp parallel for collapse(2)
     for (int n = 0; n < numnodesy; n++) {
       for (int m = 0; m < numnodesx; m++) {
         double c = GETVALUE(simdata->c, m, n, p);
@@ -1003,8 +1012,10 @@ void update_velocities(simulation_data_t *simdata) {
   We gain a factor of about 5 time faster !!
   */
   
-  #pragma omp parallel for collapse(3)
+  // Perform the update of the velocities on the GPU
+  #pragma omp target teams distribute
   for (int p = 0; p < numnodesz; p++) {
+    #pragma omp parallel for collapse(2)
     for (int n = 0; n < numnodesy; n++) {
       for (int m = 0; m < numnodesx; m++) {
         int mp1 = MIN(numnodesx - 1, m + 1);
@@ -1227,17 +1238,36 @@ void finalize_simulation(simulation_data_t *simdata) {
 }
 
 void swap_timesteps(simulation_data_t *simdata) {
-  data_t *tmpp = simdata->pold;
-  data_t *tmpvx = simdata->vxold;
-  data_t *tmpvy = simdata->vyold;
-  data_t *tmpvz = simdata->vzold;
+    int numnodesx = NUMNODESX(simdata->pold);
+    int numnodesy = NUMNODESY(simdata->pold);
+    int numnodesz = NUMNODESZ(simdata->pold);
 
-  simdata->pold = simdata->pnew;
-  simdata->pnew = tmpp;
-  simdata->vxold = simdata->vxnew;
-  simdata->vxnew = tmpvx;
-  simdata->vyold = simdata->vynew;
-  simdata->vynew = tmpvy;
-  simdata->vzold = simdata->vznew;
-  simdata->vznew = tmpvz;
+    // Perform the swap of the timesteps on the GPU
+    #pragma omp target teams distribute
+    for (int p = 0; p < numnodesz; p++) {
+      #pragma omp parallel for collapse(2)
+      for (int n = 0; n < numnodesy; n++) {
+          for (int m = 0; m < numnodesx; m++) {
+              double temp;
+
+              // Swap pressure
+              temp = GETVALUE(simdata->pold, m, n, p);
+              SETVALUE(simdata->pold, m, n, p, GETVALUE(simdata->pnew, m, n, p));
+              SETVALUE(simdata->pnew, m, n, p, temp);
+
+              // Swap velocities
+              temp = GETVALUE(simdata->vxold, m, n, p);
+              SETVALUE(simdata->vxold, m, n, p, GETVALUE(simdata->vxnew, m, n, p));
+              SETVALUE(simdata->vxnew, m, n, p, temp);
+
+              temp = GETVALUE(simdata->vyold, m, n, p);
+              SETVALUE(simdata->vyold, m, n, p, GETVALUE(simdata->vynew, m, n, p));
+              SETVALUE(simdata->vynew, m, n, p, temp);
+
+              temp = GETVALUE(simdata->vzold, m, n, p);
+              SETVALUE(simdata->vzold, m, n, p, GETVALUE(simdata->vznew, m, n, p));
+              SETVALUE(simdata->vznew, m, n, p, temp);
+          }
+      }
+    }
 }
