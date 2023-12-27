@@ -791,9 +791,18 @@ int interpolate_inputmaps(simulation_data_t *simdata, grid_t *simgrid,
         // Trilinear interpolation of the speed of sound (c) and density (rho) at the point of interest.
         // Recuperation of the values of the speed of sound (c) and density (rho) at the corners of the cube.
         // These values are used for the interpolation.
-        mc1 = mc + 1;
-        nc1 = nc + 1;
-        pc1 = pc + 1;
+        if(mc == cin->grid.numnodesx - 1)
+          mc1 = mc;
+        else
+          mc1 = mc + 1;
+        if(nc == cin->grid.numnodesy - 1)
+          nc1 = nc;
+        else
+          nc1 = nc + 1;
+        if(pc == cin->grid.numnodesz - 1)
+          pc1 = pc;
+        else
+          pc1 = pc + 1;
         // Computations of the factors of weight for the interpolation.
         // These factors are the distance between the point of interest and the closest indices.
         
