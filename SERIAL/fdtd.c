@@ -773,9 +773,18 @@ int interpolate_inputmaps(simulation_data_t *simdata, grid_t *simgrid,
         // Interpolation trilinéaire
         // Récupère les valeurs de vitesse du son (c) et de densité (rho) aux huit coins du cube englobant.
         // Ces coins sont situés autour du point d'intérêt pour l'interpolation.
-        mc1 = mc + 1;
-        nc1 = nc + 1;
-        pc1 = pc + 1;
+        if(mc == cin->grid.numnodesx - 1)
+          mc1 = mc;
+        else
+          mc1 = mc + 1;
+        if(nc == cin->grid.numnodesy - 1)
+          nc1 = nc;
+        else
+          nc1 = nc + 1;
+        if(pc == cin->grid.numnodesz - 1)
+          pc1 = pc;
+        else
+          pc1 = pc + 1;
         // Calcul des facteurs de poids (tx, ty, tz) pour l'interpolation.
         // Ces facteurs représentent la position relative du point d'intérêt à l'intérieur du cube.
         
