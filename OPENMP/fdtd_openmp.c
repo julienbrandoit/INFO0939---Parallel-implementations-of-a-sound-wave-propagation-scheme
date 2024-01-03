@@ -398,7 +398,7 @@ int write_output(output_t *output, data_t *data, int step, double time) {
 
   data_t *tmpdata = allocate_data(&output->grid);
   
-  #pragma omp parallel for collapse(3)
+  #pragma omp parallel for collapse(2)
   for (m = startm; m < endm; m++) {
     for (n = startn; n < endn; n++) {
       for (p = startp; p < endp; p++) {
@@ -755,7 +755,7 @@ int interpolate_inputmaps(simulation_data_t *simdata, grid_t *simgrid,
   
   // Boucle sur chaque noeud de la grille de simulation.
   // Ces boucles itèrent à travers les trois dimensions de la grille.
-  #pragma omp parallel for collapse(3)
+  #pragma omp parallel for collapse(2)
   for (int p = 0; p < simgrid->numnodesz; p++) {
     for (int n = 0; n < simgrid->numnodesy; n++) {
       for (int m = 0; m < simgrid->numnodesx; m++) {
@@ -885,7 +885,7 @@ int interpolate_inputmaps_nn(simulation_data_t *simdata, grid_t *simgrid,
 
   // Boucle sur chaque noeud de la grille de simulation.
   // Ces boucles itèrent à travers les trois dimensions de la grille.
-  #pragma omp parallel for collapse(3)
+  #pragma omp parallel for collapse(2)
   for (int p = 0; p < simgrid->numnodesz; p++) {
     for (int n = 0; n < simgrid->numnodesy; n++) {
       for (int m = 0; m < simgrid->numnodesx; m++) {
@@ -957,7 +957,7 @@ void update_pressure(simulation_data_t *simdata) {
   We gain a factor of about 5 time faster !!
   */
 
-  #pragma omp parallel for collapse(3)
+  #pragma omp parallel for collapse(2)
   for (int p = 0; p < numnodesz; p++) {
     for (int n = 0; n < numnodesy; n++) {
       for (int m = 0; m < numnodesx; m++) {
@@ -1003,7 +1003,7 @@ void update_velocities(simulation_data_t *simdata) {
   We gain a factor of about 5 time faster !!
   */
 
-  #pragma omp parallel for collapse(3)
+  #pragma omp parallel for collapse(2)
   for (int p = 0; p < numnodesz; p++) {
     for (int n = 0; n < numnodesy; n++) {
       for (int m = 0; m < numnodesx; m++) {
