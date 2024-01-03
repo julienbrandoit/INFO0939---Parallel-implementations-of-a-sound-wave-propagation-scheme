@@ -181,7 +181,6 @@ int main(int argc, char *argv[]) {
 
   /*INIT MPI*/
   MPI_Init(&argc, &argv);
-
   if (argc < 2) {
       printf("\nUsage: mpirun -np N ./fdtd <param_file>\n\n");
       MPI_Finalize();
@@ -1187,6 +1186,8 @@ void apply_source(simulation_data_t *simdata, int step) {
 }
 
 void update(simulation_data_t *simdata, process_s *process) {
+  #pragma omp parallel 
+  {
   const double dtdx = simdata->params.dt / simdata->params.dx;
   const int numnodesx = NUMNODESX(simdata->pold);
   const int numnodesy = NUMNODESY(simdata->pold);
@@ -1214,6 +1215,8 @@ void update(simulation_data_t *simdata, process_s *process) {
   MPI_Request request_py;
   MPI_Request request_pz;
 
+  #pragma omp master
+  {
   MPI_Sendrecv(process->vx_bdy[0], numnodesy*numnodesz, MPI_DOUBLE, process->neighbors[RIGHT], 3,
               process->vx_bdy[1], numnodesy*numnodesz, MPI_DOUBLE, process->neighbors[LEFT], 3,
               process->world->cart_comm, MPI_STATUS_IGNORE);
@@ -1225,12 +1228,12 @@ void update(simulation_data_t *simdata, process_s *process) {
   MPI_Sendrecv(process->vz_bdy[0], numnodesy*numnodesx, MPI_DOUBLE, process->neighbors[FORWARD], 5,
               process->vz_bdy[1], numnodesy*numnodesx, MPI_DOUBLE, process->neighbors[BACKWARD], 5,
               process->world->cart_comm, MPI_STATUS_IGNORE);
-              
+  }
   int size_direction[3*3];
   size_process(process->coords, process->world, size_direction);
 
   int m = 0;
-  #pragma omp parallel for collapse(1)
+  #pragma omp for collapse(1)
   for (int p = 0; p < numnodesz; p++) {
     for (int n = 0; n < numnodesy; n++) {
         double rhoc2dtdx = GETVALUE(simdata->rho, m, n, p) *
@@ -1251,11 +1254,14 @@ void update(simulation_data_t *simdata, process_s *process) {
         SETVALUE(simdata->pnew, m, n, p, value);
     }
   }
+  #pragma omp master
+  {
   MPI_Isend(process->px_bdy[0], numnodesy*numnodesz, MPI_DOUBLE, process->neighbors[LEFT], 0, process->world->cart_comm, &requestx_p);
   MPI_Irecv(process->px_bdy[1], numnodesy*numnodesz, MPI_DOUBLE, process->neighbors[RIGHT], 0, process->world->cart_comm, &request_px);
+  }
 
   int n = 0;
-  #pragma omp parallel for collapse(1)
+  #pragma omp for collapse(1)
   for (int p = 0; p < numnodesz; p++) {
     for (int m = 0; m < numnodesx; m++) {
         double rhoc2dtdx = GETVALUE(simdata->rho, m, n, p) *
@@ -1276,11 +1282,13 @@ void update(simulation_data_t *simdata, process_s *process) {
         SETVALUE(simdata->pnew, m, n, p, value);
     }
   }
+  #pragma omp master
+  {
   MPI_Isend(process->py_bdy[0], numnodesx*numnodesz, MPI_DOUBLE, process->neighbors[DOWN], 1, process->world->cart_comm, &requesty_p);
   MPI_Irecv(process->py_bdy[1], numnodesx*numnodesz, MPI_DOUBLE, process->neighbors[UP], 1, process->world->cart_comm, &request_py);
-
+  }
   int p = 0;
-  #pragma omp parallel for collapse(1)
+  #pragma omp for collapse(1)
   for (int n = 0; n < numnodesy; n++) {
     for (int m = 0; m < numnodesx; m++) {
         double rhoc2dtdx = GETVALUE(simdata->rho, m, n, p) *
@@ -1301,10 +1309,13 @@ void update(simulation_data_t *simdata, process_s *process) {
         SETVALUE(simdata->pnew, m, n, p, value);
     }
   }
+  #pragma omp master
+  {
   MPI_Isend(process->pz_bdy[0], numnodesy*numnodesx, MPI_DOUBLE, process->neighbors[BACKWARD], 2, process->world->cart_comm, &requestz_p);
   MPI_Irecv(process->pz_bdy[1], numnodesy*numnodesx, MPI_DOUBLE, process->neighbors[FORWARD], 2, process->world->cart_comm, &request_pz);
-  
-  #pragma omp parallel for collapse(2)
+  }
+
+  #pragma omp for collapse(2)
   for (int p = 1; p < numnodesz; p++) {
     for (int n = 1; n < numnodesy; n++) {
       for (int m = 1; m < numnodesx; m++) {
@@ -1330,7 +1341,7 @@ void update(simulation_data_t *simdata, process_s *process) {
 
   /*UPDATE VELOCITY*/
 
-  #pragma omp parallel for collapse(2)
+  #pragma omp for collapse(2)
   for (int p = 0; p < numnodesz - 1; p++) {
     for (int n = 0; n < numnodesy - 1; n++) {
       for (int m = 0; m < numnodesx - 1; m++) {
@@ -1358,13 +1369,16 @@ void update(simulation_data_t *simdata, process_s *process) {
       }
     }
   }
-
+  
+  #pragma omp master
+  {
   MPI_Wait(&request_px, MPI_STATUS_IGNORE);
   MPI_Wait(&request_py, MPI_STATUS_IGNORE);
   MPI_Wait(&request_pz, MPI_STATUS_IGNORE);
+  }
 
   p = numnodesz - 1;
-  #pragma omp parallel for collapse(1)
+  #pragma omp for collapse(1)
   for (int n = 0; n < numnodesy; n++) {
     for (int m = 0; m < numnodesx; m++) {
         double dtdxrho = dtdx / GETVALUE(simdata->rhohalf, m, n, p);
@@ -1400,7 +1414,7 @@ void update(simulation_data_t *simdata, process_s *process) {
   }
 
   n = numnodesy - 1;
-  #pragma omp parallel for collapse(1)
+  #pragma omp for collapse(1)
   for (int p = 0; p < numnodesz; p++) {
     for (int m = 0; m < numnodesx; m++) {
         double dtdxrho = dtdx / GETVALUE(simdata->rhohalf, m, n, p);
@@ -1435,7 +1449,7 @@ void update(simulation_data_t *simdata, process_s *process) {
   }
 
   m = numnodesx - 1;
-  #pragma omp parallel for collapse(1)
+  #pragma omp for collapse(1)
   for (int p = 0; p < numnodesz; p++) {
     for (int n = 0; n < numnodesy; n++) {
         double dtdxrho = dtdx / GETVALUE(simdata->rhohalf, m, n, p);
@@ -1468,6 +1482,7 @@ void update(simulation_data_t *simdata, process_s *process) {
 
         process->vx_bdy[0][p*numnodesy+n] = value_x;
     }
+  }
   }
 }
 
