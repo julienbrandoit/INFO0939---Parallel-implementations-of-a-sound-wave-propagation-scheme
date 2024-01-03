@@ -16,4 +16,5 @@ export OMP_TARGET_OFFLOAD=MANDATORY
 clang -O3 -fopenmp --offload-arch=sm_80 -o fdtd_openmpGPU fdtd_openmpGPU.c -lm
 
 cd ../../project_info0939/example_inputs/simple3d
-srun ../../../HPSC/GPU/fdtd_openmpGPU param_3d.txt
+srun ../../../HPSC/GPU/fdtd_openmpGPU param_simple_4x.txt
+data2gmsh out_simple_4x_pz_05.dat
