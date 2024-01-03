@@ -1009,7 +1009,7 @@ int interpolate_inputmaps(simulation_data_t *simdata, grid_t *simgrid,
   
   // Boucle sur chaque noeud de la grille de simulation.
   // Ces boucles itèrent à travers les trois dimensions de la grille.
-  #pragma omp parallel for collapse(3)
+  #pragma omp parallel for collapse(2)
   for (int p = 0; p < simgrid->numnodesz; p++) {
     for (int n = 0; n < simgrid->numnodesy; n++) {
       for (int m = 0; m < simgrid->numnodesx; m++) {
@@ -1138,7 +1138,7 @@ int interpolate_inputmaps_nn(simulation_data_t *simdata, grid_t *simgrid,
 
   // Boucle sur chaque noeud de la grille de simulation.
   // Ces boucles itèrent à travers les trois dimensions de la grille.
-  #pragma omp parallel for collapse(3)
+  #pragma omp parallel for collapse(2)
   for (int p = 0; p < simgrid->numnodesz; p++) {
     for (int n = 0; n < simgrid->numnodesy; n++) {
       for (int m = 0; m < simgrid->numnodesx; m++) {
@@ -1228,7 +1228,7 @@ void update(simulation_data_t *simdata, process_s *process) {
   size_process(process->coords, process->world, size_direction);
 
   int m = 0;
-  #pragma omp parallel for collapse(2)
+  #pragma omp parallel for collapse(1)
   for (int p = 0; p < numnodesz; p++) {
     for (int n = 0; n < numnodesy; n++) {
         double rhoc2dtdx = GETVALUE(simdata->rho, m, n, p) *
@@ -1252,7 +1252,7 @@ void update(simulation_data_t *simdata, process_s *process) {
   MPI_Isend(process->px_bdy[0], numnodesy*numnodesz, MPI_DOUBLE, process->neighbors[LEFT], 0, process->world->cart_comm, &requestx_p);
 
   int n = 0;
-  #pragma omp parallel for collapse(2)
+  #pragma omp parallel for collapse(1)
   for (int p = 0; p < numnodesz; p++) {
     for (int m = 0; m < numnodesx; m++) {
         double rhoc2dtdx = GETVALUE(simdata->rho, m, n, p) *
@@ -1276,7 +1276,7 @@ void update(simulation_data_t *simdata, process_s *process) {
   MPI_Isend(process->py_bdy[0], numnodesx*numnodesz, MPI_DOUBLE, process->neighbors[DOWN], 1, process->world->cart_comm, &requesty_p);
   
   int p = 0;
-  #pragma omp parallel for collapse(2)
+  #pragma omp parallel for collapse(1)
   for (int n = 0; n < numnodesy; n++) {
     for (int m = 0; m < numnodesx; m++) {
         double rhoc2dtdx = GETVALUE(simdata->rho, m, n, p) *
@@ -1367,7 +1367,7 @@ void update(simulation_data_t *simdata, process_s *process) {
   MPI_Wait(&request_pz, MPI_STATUS_IGNORE);
 
   p = numnodesz - 1;
-  #pragma omp parallel for collapse(2)
+  #pragma omp parallel for collapse(1)
   for (int n = 0; n < numnodesy; n++) {
     for (int m = 0; m < numnodesx; m++) {
         double dtdxrho = dtdx / GETVALUE(simdata->rhohalf, m, n, p);
@@ -1403,7 +1403,7 @@ void update(simulation_data_t *simdata, process_s *process) {
   }
 
   n = numnodesy - 1;
-  #pragma omp parallel for collapse(2)
+  #pragma omp parallel for collapse(1)
   for (int p = 0; p < numnodesz; p++) {
     for (int m = 0; m < numnodesx; m++) {
         double dtdxrho = dtdx / GETVALUE(simdata->rhohalf, m, n, p);
@@ -1438,7 +1438,7 @@ void update(simulation_data_t *simdata, process_s *process) {
   }
 
   m = numnodesx - 1;
-  #pragma omp parallel for collapse(2)
+  #pragma omp parallel for collapse(1)
   for (int p = 0; p < numnodesz; p++) {
     for (int n = 0; n < numnodesy; n++) {
         double dtdxrho = dtdx / GETVALUE(simdata->rhohalf, m, n, p);

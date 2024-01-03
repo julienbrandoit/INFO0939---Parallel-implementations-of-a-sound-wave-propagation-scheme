@@ -10,10 +10,10 @@ module load OpenMPI
 module load Info0939Tools
 
 mpicc -fopenmp MPI_OPENMP/fdtd_mpi_openmp.c -o bin/fdtd_mpi_openmp -lm -O3
-cd ./example_inputs/slit
+cd ./example_inputs/slit/simple3d_4x
 
 export OMP_NUM_THREADS=4
 export OMP_PROC_BIND=spread
 
-srun ../../bin/fdtd_mpi_openmp param_slit_1x.txt
-data2gmsh out_slit_1x_pz_025.dat
+srun ../../../bin/fdtd_mpi_openmp param_simple_4x.txt
+data2gmsh out_slit_1x_pz_05.dat
