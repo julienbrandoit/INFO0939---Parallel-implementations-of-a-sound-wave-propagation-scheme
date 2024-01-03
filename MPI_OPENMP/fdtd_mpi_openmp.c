@@ -1009,7 +1009,6 @@ int interpolate_inputmaps(simulation_data_t *simdata, grid_t *simgrid,
   
   // Boucle sur chaque noeud de la grille de simulation.
   // Ces boucles itèrent à travers les trois dimensions de la grille.
-  #pragma omp parallel for collapse(2)
   for (int p = 0; p < simgrid->numnodesz; p++) {
     for (int n = 0; n < simgrid->numnodesy; n++) {
       for (int m = 0; m < simgrid->numnodesx; m++) {
@@ -1138,7 +1137,6 @@ int interpolate_inputmaps_nn(simulation_data_t *simdata, grid_t *simgrid,
 
   // Boucle sur chaque noeud de la grille de simulation.
   // Ces boucles itèrent à travers les trois dimensions de la grille.
-  #pragma omp parallel for collapse(2)
   for (int p = 0; p < simgrid->numnodesz; p++) {
     for (int n = 0; n < simgrid->numnodesy; n++) {
       for (int m = 0; m < simgrid->numnodesx; m++) {
@@ -1212,6 +1210,10 @@ void update(simulation_data_t *simdata, process_s *process) {
   MPI_Request requesty_p;
   MPI_Request requestz_p;
 
+  MPI_Request request_px;
+  MPI_Request request_py;
+  MPI_Request request_pz;
+
   MPI_Sendrecv(process->vx_bdy[0], numnodesy*numnodesz, MPI_DOUBLE, process->neighbors[RIGHT], 3,
               process->vx_bdy[1], numnodesy*numnodesz, MPI_DOUBLE, process->neighbors[LEFT], 3,
               process->world->cart_comm, MPI_STATUS_IGNORE);
@@ -1250,6 +1252,7 @@ void update(simulation_data_t *simdata, process_s *process) {
     }
   }
   MPI_Isend(process->px_bdy[0], numnodesy*numnodesz, MPI_DOUBLE, process->neighbors[LEFT], 0, process->world->cart_comm, &requestx_p);
+  MPI_Irecv(process->px_bdy[1], numnodesy*numnodesz, MPI_DOUBLE, process->neighbors[RIGHT], 0, process->world->cart_comm, &request_px);
 
   int n = 0;
   #pragma omp parallel for collapse(1)
@@ -1274,7 +1277,8 @@ void update(simulation_data_t *simdata, process_s *process) {
     }
   }
   MPI_Isend(process->py_bdy[0], numnodesx*numnodesz, MPI_DOUBLE, process->neighbors[DOWN], 1, process->world->cart_comm, &requesty_p);
-  
+  MPI_Irecv(process->py_bdy[1], numnodesx*numnodesz, MPI_DOUBLE, process->neighbors[UP], 1, process->world->cart_comm, &request_py);
+
   int p = 0;
   #pragma omp parallel for collapse(1)
   for (int n = 0; n < numnodesy; n++) {
@@ -1298,6 +1302,7 @@ void update(simulation_data_t *simdata, process_s *process) {
     }
   }
   MPI_Isend(process->pz_bdy[0], numnodesy*numnodesx, MPI_DOUBLE, process->neighbors[BACKWARD], 2, process->world->cart_comm, &requestz_p);
+  MPI_Irecv(process->pz_bdy[1], numnodesy*numnodesx, MPI_DOUBLE, process->neighbors[FORWARD], 2, process->world->cart_comm, &request_pz);
   
   #pragma omp parallel for collapse(2)
   for (int p = 1; p < numnodesz; p++) {
@@ -1325,14 +1330,6 @@ void update(simulation_data_t *simdata, process_s *process) {
 
   /*UPDATE VELOCITY*/
 
-  MPI_Request request_px;
-  MPI_Request request_py;
-  MPI_Request request_pz;
-
-  MPI_Irecv(process->px_bdy[1], numnodesy*numnodesz, MPI_DOUBLE, process->neighbors[RIGHT], 0, process->world->cart_comm, &request_px);
-  MPI_Irecv(process->py_bdy[1], numnodesx*numnodesz, MPI_DOUBLE, process->neighbors[UP], 1, process->world->cart_comm, &request_py);
-  MPI_Irecv(process->pz_bdy[1], numnodesy*numnodesx, MPI_DOUBLE, process->neighbors[FORWARD], 2, process->world->cart_comm, &request_pz);
-  
   #pragma omp parallel for collapse(2)
   for (int p = 0; p < numnodesz - 1; p++) {
     for (int n = 0; n < numnodesy - 1; n++) {
