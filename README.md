@@ -5,4 +5,4 @@ This GitHub repository contains a project developed for the INFO0939 course. It 
 The .jobs files are designed to run on the NIC5 and Lucia clusters.
 
 ## Details
-For a detailed analysis of the project's stability, refer to the accompanying [PDF document](https://www.overleaf.com/read/pcgcnysnxcjh#c24766).
+For a detailed analysis of the project's stability, refer to the accompanying [PDF document](Numerical_stability_HPSC.pdf).
